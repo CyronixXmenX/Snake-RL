@@ -243,7 +243,8 @@ python train_dqn_optimized.py --config config_gpu_optimized.yaml
 - Multiple training steps per environment step (keeps GPU busy)
 - Expected speedup: **8x faster** than standard GPU training, **50x faster** than CPU
 
-**See [GPU Utilization Improvements](GPU_UTILIZATION_IMPROVEMENTS.md) for detailed explanation.**
+📖 **Quick Start**: [QUICKSTART_GPU_OPTIMIZATION.md](QUICKSTART_GPU_OPTIMIZATION.md)  
+📚 **Full Guide**: [GPU_UTILIZATION_IMPROVEMENTS.md](GPU_UTILIZATION_IMPROVEMENTS.md)
 
 ### Ready-to-Use GPU Commands
 
