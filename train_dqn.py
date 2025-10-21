@@ -118,6 +118,11 @@ def main() -> None:
             "epsilon_start": args.eps_start,
             "epsilon_end": args.eps_end,
             "epsilon_decay_steps": args.eps_decay_steps,
+        },
+        "GPU Optimization": {
+            "use_amp": args.use_amp,
+            "pin_memory": args.pin_memory,
+            "gradient_accumulation_steps": args.gradient_accumulation_steps,
         }
     })
 
@@ -143,6 +148,9 @@ def main() -> None:
         buffer_size=args.buffer_size,
         train_start=args.train_start,
         device=args.device,
+        use_amp=args.use_amp,
+        pin_memory=args.pin_memory,
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
     )
     agent = DQNAgent(cfg)
     train_logger.log_training_start(args.total_steps, str(agent.device))

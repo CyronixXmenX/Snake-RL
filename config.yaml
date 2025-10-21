@@ -33,6 +33,12 @@ exploration:
   epsilon_end: 0.05
   epsilon_decay_steps: 200000
 
+# GPU optimization settings (only effective when using CUDA)
+gpu_optimization:
+  use_amp: false  # Automatic Mixed Precision - can provide 2-3x speedup on modern GPUs
+  pin_memory: true  # Pin memory for faster CPU-to-GPU data transfer
+  gradient_accumulation_steps: 1  # Accumulate gradients for larger effective batch sizes
+
 # Logging (optional)
 # Uncomment and configure as needed
 # logging:

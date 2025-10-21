@@ -111,7 +111,8 @@ def benchmark_environment(
 def benchmark_agent(
     grid_w: int = 24,
     grid_h: int = 20,
-    episodes: int = 100
+    episodes: int = 100,
+    device: str = "auto"
 ) -> Dict[str, float]:
     """
     Benchmark agent performance.
@@ -120,12 +121,13 @@ def benchmark_agent(
         grid_w: Grid width
         grid_h: Grid height
         episodes: Number of episodes to run
+        device: Device to use for benchmarking ('auto', 'cpu', 'cuda')
         
     Returns:
         Dictionary with benchmark results
     """
     env = SnakeEnv(grid_w=grid_w, grid_h=grid_h, render_mode="none")
-    cfg = DQNConfig(grid_w=grid_w, grid_h=grid_h)
+    cfg = DQNConfig(grid_w=grid_w, grid_h=grid_h, device=device)
     agent = DQNAgent(cfg)
     
     inference_bench = Benchmark("Agent inference")
@@ -167,6 +169,7 @@ def benchmark_agent(
         "avg_inference_time_ms": inference_bench.avg_time() * 1000,
         "avg_training_time_ms": training_bench.avg_time() * 1000 if training_bench.times else 0,
         "training_steps": len(training_bench.times),
+        "device": str(agent.device),
     }
 
 
@@ -191,6 +194,8 @@ def print_benchmark_results(results: Dict[str, Any], title: str = "Benchmark Res
 
 def main():
     """Run comprehensive benchmarks."""
+    import torch
+    
     print("Running Snake RL Performance Benchmarks...")
     print("This may take a minute...\n")
     
@@ -198,9 +203,31 @@ def main():
     env_results = benchmark_environment(episodes=100)
     print_benchmark_results(env_results, "Environment Performance")
     
-    # Benchmark agent (fewer episodes as it's slower)
-    agent_results = benchmark_agent(episodes=20)
-    print_benchmark_results(agent_results, "Agent Performance")
+    # Benchmark agent on CPU
+    print("Benchmarking agent on CPU...")
+    agent_results_cpu = benchmark_agent(episodes=20, device="cpu")
+    print_benchmark_results(agent_results_cpu, "Agent Performance (CPU)")
+    
+    # Benchmark agent on GPU if available
+    if torch.cuda.is_available():
+        print("Benchmarking agent on GPU...")
+        agent_results_gpu = benchmark_agent(episodes=20, device="cuda")
+        print_benchmark_results(agent_results_gpu, "Agent Performance (GPU)")
+        
+        # Calculate speedup
+        cpu_training_time = agent_results_cpu["avg_training_time_ms"]
+        gpu_training_time = agent_results_gpu["avg_training_time_ms"]
+        if cpu_training_time > 0 and gpu_training_time > 0:
+            speedup = cpu_training_time / gpu_training_time
+            print(f"\n{'='*60}")
+            print(f"GPU Speedup: {speedup:.2f}x faster than CPU")
+            print(f"{'='*60}\n")
+    else:
+        print("\nGPU not available. Skipping GPU benchmarks.")
+        print("To enable GPU acceleration:")
+        print("1. Ensure CUDA is installed")
+        print("2. Install PyTorch with CUDA support")
+        print("3. Set device='cuda' or device='auto' in config\n")
     
     print("Benchmarks complete!")
 

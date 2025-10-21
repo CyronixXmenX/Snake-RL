@@ -32,6 +32,10 @@ class DQNConfig:
     buffer_size: int = 100_000
     train_start: int = 10_000
     device: str = "auto"  # "cpu" | "cuda" | "auto"
+    # GPU optimization settings
+    use_amp: bool = False  # Automatic Mixed Precision for faster GPU training
+    pin_memory: bool = True  # Pin memory for faster data transfer to GPU
+    gradient_accumulation_steps: int = 1  # Gradient accumulation for larger effective batch sizes
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert config to dictionary."""
@@ -174,6 +178,7 @@ class DQNAgent:
     - Double DQN for reduced overestimation
     - Gradient clipping
     - Memory-efficient uint8 observation storage
+    - GPU optimizations (mixed precision, pin memory, gradient accumulation)
     
     Args:
         cfg: Configuration object with hyperparameters
@@ -198,6 +203,13 @@ class DQNAgent:
         self.target_update = cfg.target_update
 
         self.train_steps = 0
+        
+        # GPU optimizations
+        self.use_amp = cfg.use_amp and self.device.type == "cuda"
+        self.scaler = torch.amp.GradScaler(enabled=self.use_amp) if self.use_amp else None
+        self.pin_memory = cfg.pin_memory and self.device.type == "cuda"
+        self.gradient_accumulation_steps = cfg.gradient_accumulation_steps
+        self._accumulated_steps = 0
     
     def _get_device(self, device_cfg: str) -> torch.device:
         """Determine compute device based on configuration."""
@@ -223,7 +235,10 @@ class DQNAgent:
         if np.random.rand() < epsilon:
             return np.random.randint(0, self.cfg.num_actions)
         # obs: (C,H,W) uint8 -> float32 [0,1]
-        obs_t = torch.from_numpy(obs).float().div(255.0).unsqueeze(0).to(self.device)
+        obs_t = torch.from_numpy(obs).float().div(255.0).unsqueeze(0)
+        if self.pin_memory:
+            obs_t = obs_t.pin_memory()
+        obs_t = obs_t.to(self.device, non_blocking=True)
         q_values = self.q(obs_t)
         action = int(q_values.argmax(dim=1).item())
         return action
@@ -238,6 +253,7 @@ class DQNAgent:
         
         Samples a batch from replay buffer, computes TD error using Double DQN,
         and updates the Q-network. Periodically updates target network.
+        Supports mixed precision training and gradient accumulation.
         
         Returns:
             Loss value if training occurred, None otherwise
@@ -246,36 +262,75 @@ class DQNAgent:
             return None
 
         batch = self.replay.sample(self.batch_size)
-        obs = torch.from_numpy(batch["obs"]).float().div(255.0).to(self.device)          # (B,C,H,W)
-        next_obs = torch.from_numpy(batch["next_obs"]).float().div(255.0).to(self.device)
-        actions = torch.from_numpy(batch["actions"]).long().to(self.device)              # (B,)
-        rewards = torch.from_numpy(batch["rewards"]).float().to(self.device)             # (B,)
-        dones = torch.from_numpy(batch["dones"]).float().to(self.device)                 # (B,)
+        
+        # Convert to tensors with optional pin memory for faster transfer
+        obs = torch.from_numpy(batch["obs"]).float().div(255.0)
+        next_obs = torch.from_numpy(batch["next_obs"]).float().div(255.0)
+        actions = torch.from_numpy(batch["actions"]).long()
+        rewards = torch.from_numpy(batch["rewards"]).float()
+        dones = torch.from_numpy(batch["dones"]).float()
+        
+        # Pin memory if enabled for faster GPU transfer
+        if self.pin_memory:
+            obs = obs.pin_memory()
+            next_obs = next_obs.pin_memory()
+            actions = actions.pin_memory()
+            rewards = rewards.pin_memory()
+            dones = dones.pin_memory()
+        
+        # Transfer to device (non-blocking if pinned memory)
+        obs = obs.to(self.device, non_blocking=self.pin_memory)
+        next_obs = next_obs.to(self.device, non_blocking=self.pin_memory)
+        actions = actions.to(self.device, non_blocking=self.pin_memory)
+        rewards = rewards.to(self.device, non_blocking=self.pin_memory)
+        dones = dones.to(self.device, non_blocking=self.pin_memory)
 
-        # Current Q(s,a)
-        q_values = self.q(obs)
-        q_sa = q_values.gather(1, actions.unsqueeze(1)).squeeze(1)
+        # Forward pass with optional automatic mixed precision
+        with torch.amp.autocast(device_type=self.device.type, enabled=self.use_amp):
+            # Current Q(s,a)
+            q_values = self.q(obs)
+            q_sa = q_values.gather(1, actions.unsqueeze(1)).squeeze(1)
 
-        with torch.no_grad():
-            # Double DQN: action selection by online net, evaluation by target net
-            next_q_values = self.q(next_obs)
-            next_actions = next_q_values.argmax(dim=1, keepdim=True)  # (B,1)
-            next_target_q_values = self.target_q(next_obs)
-            next_q = next_target_q_values.gather(1, next_actions).squeeze(1)
-            target = rewards + (1.0 - dones) * self.gamma * next_q
+            with torch.no_grad():
+                # Double DQN: action selection by online net, evaluation by target net
+                next_q_values = self.q(next_obs)
+                next_actions = next_q_values.argmax(dim=1, keepdim=True)  # (B,1)
+                next_target_q_values = self.target_q(next_obs)
+                next_q = next_target_q_values.gather(1, next_actions).squeeze(1)
+                target = rewards + (1.0 - dones) * self.gamma * next_q
 
-        loss = nn.SmoothL1Loss()(q_sa, target)
+            loss = nn.SmoothL1Loss()(q_sa, target)
+            
+            # Scale loss for gradient accumulation
+            loss = loss / self.gradient_accumulation_steps
 
-        self.optim.zero_grad(set_to_none=True)
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.q.parameters(), max_norm=10.0)
-        self.optim.step()
+        # Backward pass with optional gradient scaling for mixed precision
+        if self.use_amp and self.scaler is not None:
+            self.scaler.scale(loss).backward()
+        else:
+            loss.backward()
+        
+        self._accumulated_steps += 1
+        
+        # Only step optimizer after accumulating gradients
+        if self._accumulated_steps >= self.gradient_accumulation_steps:
+            if self.use_amp and self.scaler is not None:
+                self.scaler.unscale_(self.optim)
+                torch.nn.utils.clip_grad_norm_(self.q.parameters(), max_norm=10.0)
+                self.scaler.step(self.optim)
+                self.scaler.update()
+            else:
+                torch.nn.utils.clip_grad_norm_(self.q.parameters(), max_norm=10.0)
+                self.optim.step()
+            
+            self.optim.zero_grad(set_to_none=True)
+            self._accumulated_steps = 0
 
         self.train_steps += 1
         if self.train_steps % self.target_update == 0:
             self.target_q.load_state_dict(self.q.state_dict())
 
-        return float(loss.item())
+        return float(loss.item() * self.gradient_accumulation_steps)
 
     def save(self, path: str) -> None:
         """
@@ -285,16 +340,16 @@ class DQNAgent:
             path: File path to save checkpoint
         """
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        torch.save(
-            {
-                "model": self.q.state_dict(),
-                "target_model": self.target_q.state_dict(),
-                "optimizer": self.optim.state_dict(),
-                "config": self.cfg.to_dict(),
-                "train_steps": self.train_steps,
-            },
-            path,
-        )
+        checkpoint = {
+            "model": self.q.state_dict(),
+            "target_model": self.target_q.state_dict(),
+            "optimizer": self.optim.state_dict(),
+            "config": self.cfg.to_dict(),
+            "train_steps": self.train_steps,
+        }
+        if self.use_amp and self.scaler is not None:
+            checkpoint["scaler"] = self.scaler.state_dict()
+        torch.save(checkpoint, path)
 
     def load(self, path: str, strict: bool = True) -> None:
         """
@@ -314,3 +369,5 @@ class DQNAgent:
             self.optim.load_state_dict(ckpt["optimizer"])
         if "train_steps" in ckpt:
             self.train_steps = ckpt["train_steps"]
+        if "scaler" in ckpt and self.use_amp and self.scaler is not None:
+            self.scaler.load_state_dict(ckpt["scaler"])
