@@ -1,0 +1,233 @@
+2025-10-21 15:04:54 - snake_rl - INFO - ============================================================
+2025-10-21 15:04:54 - snake_rl - INFO - Training Configuration:
+2025-10-21 15:04:54 - snake_rl - INFO -   Environment:
+2025-10-21 15:04:54 - snake_rl - INFO -     grid_width: 24
+2025-10-21 15:04:54 - snake_rl - INFO -     grid_height: 20
+2025-10-21 15:04:54 - snake_rl - INFO -     step_penalty: -0.01
+2025-10-21 15:04:54 - snake_rl - INFO -     food_reward: 1.0
+2025-10-21 15:04:54 - snake_rl - INFO -     death_reward: -1.0
+2025-10-21 15:04:54 - snake_rl - INFO -   DQN:
+2025-10-21 15:04:54 - snake_rl - INFO -     learning_rate: 0.0001
+2025-10-21 15:04:54 - snake_rl - INFO -     gamma: 0.99
+2025-10-21 15:04:54 - snake_rl - INFO -     batch_size: 64
+2025-10-21 15:04:54 - snake_rl - INFO -     target_update: 1000
+2025-10-21 15:04:54 - snake_rl - INFO -     buffer_size: 100000
+2025-10-21 15:04:54 - snake_rl - INFO -     train_start: 10000
+2025-10-21 15:04:54 - snake_rl - INFO -   Training:
+2025-10-21 15:04:54 - snake_rl - INFO -     total_steps: 500000
+2025-10-21 15:04:54 - snake_rl - INFO -     seed: 1337
+2025-10-21 15:04:54 - snake_rl - INFO -     device: auto
+2025-10-21 15:04:54 - snake_rl - INFO -   Exploration:
+2025-10-21 15:04:54 - snake_rl - INFO -     epsilon_start: 1.0
+2025-10-21 15:04:54 - snake_rl - INFO -     epsilon_end: 0.05
+2025-10-21 15:04:54 - snake_rl - INFO -     epsilon_decay_steps: 200000
+2025-10-21 15:04:54 - snake_rl - INFO -   GPU Optimization:
+2025-10-21 15:04:54 - snake_rl - INFO -     use_amp: False
+2025-10-21 15:04:54 - snake_rl - INFO -     pin_memory: True
+2025-10-21 15:04:54 - snake_rl - INFO -     gradient_accumulation_steps: 1
+2025-10-21 15:04:54 - snake_rl - INFO - ============================================================
+2025-10-21 15:05:03 - snake_rl - INFO - ============================================================
+2025-10-21 15:05:03 - snake_rl - INFO - Starting training for 500000 steps
+2025-10-21 15:05:03 - snake_rl - INFO - Device: cpu
+2025-10-21 15:05:03 - snake_rl - INFO - ============================================================
+2025-10-21 15:05:08 - snake_rl - INFO - Eval @ step 10000: avg_return=-1.10 (5 episodes)
+2025-10-21 15:05:08 - snake_rl - INFO - Best checkpoint saved: checkpoints\dqn_snake_best.pth
+2025-10-21 15:07:03 - snake_rl - INFO - ============================================================
+2025-10-21 15:07:03 - snake_rl - INFO - Training Configuration:
+2025-10-21 15:07:03 - snake_rl - INFO -   Environment:
+2025-10-21 15:07:03 - snake_rl - INFO -     grid_width: 24
+2025-10-21 15:07:03 - snake_rl - INFO -     grid_height: 20
+2025-10-21 15:07:03 - snake_rl - INFO -     step_penalty: -0.01
+2025-10-21 15:07:03 - snake_rl - INFO -     food_reward: 1.0
+2025-10-21 15:07:03 - snake_rl - INFO -     death_reward: -1.0
+2025-10-21 15:07:03 - snake_rl - INFO -   DQN:
+2025-10-21 15:07:03 - snake_rl - INFO -     learning_rate: 0.0001
+2025-10-21 15:07:03 - snake_rl - INFO -     gamma: 0.99
+2025-10-21 15:07:03 - snake_rl - INFO -     batch_size: 64
+2025-10-21 15:07:03 - snake_rl - INFO -     target_update: 1000
+2025-10-21 15:07:03 - snake_rl - INFO -     buffer_size: 100000
+2025-10-21 15:07:03 - snake_rl - INFO -     train_start: 10000
+2025-10-21 15:07:03 - snake_rl - INFO -   Training:
+2025-10-21 15:07:03 - snake_rl - INFO -     total_steps: 500000
+2025-10-21 15:07:03 - snake_rl - INFO -     seed: 1337
+2025-10-21 15:07:03 - snake_rl - INFO -     device: auto
+2025-10-21 15:07:03 - snake_rl - INFO -   Exploration:
+2025-10-21 15:07:03 - snake_rl - INFO -     epsilon_start: 1.0
+2025-10-21 15:07:03 - snake_rl - INFO -     epsilon_end: 0.05
+2025-10-21 15:07:03 - snake_rl - INFO -     epsilon_decay_steps: 200000
+2025-10-21 15:07:03 - snake_rl - INFO -   GPU Optimization:
+2025-10-21 15:07:03 - snake_rl - INFO -     use_amp: False
+2025-10-21 15:07:03 - snake_rl - INFO -     pin_memory: True
+2025-10-21 15:07:03 - snake_rl - INFO -     gradient_accumulation_steps: 1
+2025-10-21 15:07:03 - snake_rl - INFO - ============================================================
+2025-10-21 15:07:04 - snake_rl - INFO - ============================================================
+2025-10-21 15:07:04 - snake_rl - INFO - Starting training for 500000 steps
+2025-10-21 15:07:04 - snake_rl - INFO - Device: cpu
+2025-10-21 15:07:04 - snake_rl - INFO - ============================================================
+2025-10-21 15:07:06 - snake_rl - INFO - Eval @ step 10000: avg_return=-1.12 (5 episodes)
+2025-10-21 15:07:07 - snake_rl - INFO - Best checkpoint saved: checkpoints\dqn_snake_best.pth
+2025-10-21 15:08:13 - snake_rl - INFO - ============================================================
+2025-10-21 15:08:13 - snake_rl - INFO - Training Configuration:
+2025-10-21 15:08:13 - snake_rl - INFO -   Environment:
+2025-10-21 15:08:13 - snake_rl - INFO -     grid_width: 24
+2025-10-21 15:08:13 - snake_rl - INFO -     grid_height: 20
+2025-10-21 15:08:13 - snake_rl - INFO -     step_penalty: -0.01
+2025-10-21 15:08:13 - snake_rl - INFO -     food_reward: 1.0
+2025-10-21 15:08:13 - snake_rl - INFO -     death_reward: -1.0
+2025-10-21 15:08:13 - snake_rl - INFO -   DQN:
+2025-10-21 15:08:13 - snake_rl - INFO -     learning_rate: 0.0002
+2025-10-21 15:08:13 - snake_rl - INFO -     gamma: 0.99
+2025-10-21 15:08:13 - snake_rl - INFO -     batch_size: 128
+2025-10-21 15:08:13 - snake_rl - INFO -     target_update: 1000
+2025-10-21 15:08:13 - snake_rl - INFO -     buffer_size: 100000
+2025-10-21 15:08:13 - snake_rl - INFO -     train_start: 10000
+2025-10-21 15:08:13 - snake_rl - INFO -   Training:
+2025-10-21 15:08:13 - snake_rl - INFO -     total_steps: 500000
+2025-10-21 15:08:13 - snake_rl - INFO -     seed: 1337
+2025-10-21 15:08:13 - snake_rl - INFO -     device: cuda
+2025-10-21 15:08:13 - snake_rl - INFO -   Exploration:
+2025-10-21 15:08:13 - snake_rl - INFO -     epsilon_start: 1.0
+2025-10-21 15:08:13 - snake_rl - INFO -     epsilon_end: 0.05
+2025-10-21 15:08:13 - snake_rl - INFO -     epsilon_decay_steps: 200000
+2025-10-21 15:08:13 - snake_rl - INFO -   GPU Optimization:
+2025-10-21 15:08:13 - snake_rl - INFO -     use_amp: True
+2025-10-21 15:08:13 - snake_rl - INFO -     pin_memory: True
+2025-10-21 15:08:13 - snake_rl - INFO -     gradient_accumulation_steps: 1
+2025-10-21 15:08:13 - snake_rl - INFO - ============================================================
+2025-10-21 15:16:29 - snake_rl - INFO - ============================================================
+2025-10-21 15:16:29 - snake_rl - INFO - Training Configuration:
+2025-10-21 15:16:29 - snake_rl - INFO -   Environment:
+2025-10-21 15:16:29 - snake_rl - INFO -     grid_width: 24
+2025-10-21 15:16:29 - snake_rl - INFO -     grid_height: 20
+2025-10-21 15:16:29 - snake_rl - INFO -     step_penalty: -0.01
+2025-10-21 15:16:29 - snake_rl - INFO -     food_reward: 1.0
+2025-10-21 15:16:29 - snake_rl - INFO -     death_reward: -1.0
+2025-10-21 15:16:29 - snake_rl - INFO -   DQN:
+2025-10-21 15:16:29 - snake_rl - INFO -     learning_rate: 0.0002
+2025-10-21 15:16:29 - snake_rl - INFO -     gamma: 0.99
+2025-10-21 15:16:29 - snake_rl - INFO -     batch_size: 128
+2025-10-21 15:16:29 - snake_rl - INFO -     target_update: 1000
+2025-10-21 15:16:29 - snake_rl - INFO -     buffer_size: 100000
+2025-10-21 15:16:29 - snake_rl - INFO -     train_start: 10000
+2025-10-21 15:16:29 - snake_rl - INFO -   Training:
+2025-10-21 15:16:29 - snake_rl - INFO -     total_steps: 500000
+2025-10-21 15:16:29 - snake_rl - INFO -     seed: 1337
+2025-10-21 15:16:29 - snake_rl - INFO -     device: cuda
+2025-10-21 15:16:29 - snake_rl - INFO -   Exploration:
+2025-10-21 15:16:29 - snake_rl - INFO -     epsilon_start: 1.0
+2025-10-21 15:16:29 - snake_rl - INFO -     epsilon_end: 0.05
+2025-10-21 15:16:29 - snake_rl - INFO -     epsilon_decay_steps: 200000
+2025-10-21 15:16:29 - snake_rl - INFO -   GPU Optimization:
+2025-10-21 15:16:29 - snake_rl - INFO -     use_amp: True
+2025-10-21 15:16:29 - snake_rl - INFO -     pin_memory: True
+2025-10-21 15:16:29 - snake_rl - INFO -     gradient_accumulation_steps: 1
+2025-10-21 15:16:29 - snake_rl - INFO - ============================================================
+2025-10-21 15:16:35 - snake_rl - INFO - ============================================================
+2025-10-21 15:16:35 - snake_rl - INFO - Starting training for 500000 steps
+2025-10-21 15:16:35 - snake_rl - INFO - Device: cuda
+2025-10-21 15:16:35 - snake_rl - INFO - ============================================================
+2025-10-21 15:16:38 - snake_rl - INFO - Eval @ step 10000: avg_return=-1.10 (5 episodes)
+2025-10-21 15:16:38 - snake_rl - INFO - Best checkpoint saved: checkpoints\dqn_snake_best.pth
+2025-10-21 15:18:27 - snake_rl - INFO - Eval @ step 20000: avg_return=-8.15 (5 episodes)
+2025-10-21 15:18:27 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 15:20:16 - snake_rl - INFO - Eval @ step 30000: avg_return=-8.62 (5 episodes)
+2025-10-21 15:20:18 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 15:22:11 - snake_rl - INFO - Eval @ step 40000: avg_return=-19.20 (5 episodes)
+2025-10-21 15:22:14 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 15:24:05 - snake_rl - INFO - Eval @ step 50000: avg_return=-12.26 (5 episodes)
+2025-10-21 15:24:07 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 15:25:58 - snake_rl - INFO - Eval @ step 60000: avg_return=-11.87 (5 episodes)
+2025-10-21 15:26:00 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 15:27:53 - snake_rl - INFO - Eval @ step 70000: avg_return=-15.62 (5 episodes)
+2025-10-21 15:27:53 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 15:29:51 - snake_rl - INFO - Eval @ step 80000: avg_return=-19.20 (5 episodes)
+2025-10-21 15:29:51 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 15:31:47 - snake_rl - INFO - Eval @ step 90000: avg_return=-12.18 (5 episodes)
+2025-10-21 15:31:47 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 15:33:45 - snake_rl - INFO - Eval @ step 100000: avg_return=-19.00 (5 episodes)
+2025-10-21 15:33:45 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 15:35:44 - snake_rl - INFO - Eval @ step 110000: avg_return=-19.20 (5 episodes)
+2025-10-21 15:35:44 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 15:37:42 - snake_rl - INFO - Eval @ step 120000: avg_return=-15.61 (5 episodes)
+2025-10-21 15:37:45 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 15:39:48 - snake_rl - INFO - Eval @ step 130000: avg_return=-19.20 (5 episodes)
+2025-10-21 15:39:48 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 15:41:49 - snake_rl - INFO - Eval @ step 140000: avg_return=-19.00 (5 episodes)
+2025-10-21 15:41:50 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 15:43:50 - snake_rl - INFO - Eval @ step 150000: avg_return=-19.20 (5 episodes)
+2025-10-21 15:43:51 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 15:45:51 - snake_rl - INFO - Eval @ step 160000: avg_return=-19.20 (5 episodes)
+2025-10-21 15:45:52 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 15:47:53 - snake_rl - INFO - Eval @ step 170000: avg_return=-18.80 (5 episodes)
+2025-10-21 15:47:53 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 15:49:50 - snake_rl - INFO - Eval @ step 180000: avg_return=-12.14 (5 episodes)
+2025-10-21 15:49:50 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 15:51:49 - snake_rl - INFO - Eval @ step 190000: avg_return=-19.20 (5 episodes)
+2025-10-21 15:51:50 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 15:53:50 - snake_rl - INFO - Eval @ step 200000: avg_return=-19.00 (5 episodes)
+2025-10-21 15:53:50 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 15:55:50 - snake_rl - INFO - Eval @ step 210000: avg_return=-19.00 (5 episodes)
+2025-10-21 15:55:51 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 15:57:49 - snake_rl - INFO - Eval @ step 220000: avg_return=-19.20 (5 episodes)
+2025-10-21 15:57:49 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 15:59:50 - snake_rl - INFO - Eval @ step 230000: avg_return=-19.20 (5 episodes)
+2025-10-21 15:59:53 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 16:01:53 - snake_rl - INFO - Eval @ step 240000: avg_return=-19.20 (5 episodes)
+2025-10-21 16:01:56 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 16:03:57 - snake_rl - INFO - Eval @ step 250000: avg_return=-19.00 (5 episodes)
+2025-10-21 16:03:58 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 16:05:57 - snake_rl - INFO - Eval @ step 260000: avg_return=-15.56 (5 episodes)
+2025-10-21 16:05:57 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 16:07:58 - snake_rl - INFO - Eval @ step 270000: avg_return=-18.80 (5 episodes)
+2025-10-21 16:07:58 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 16:09:59 - snake_rl - INFO - Eval @ step 280000: avg_return=-19.00 (5 episodes)
+2025-10-21 16:09:59 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 16:12:00 - snake_rl - INFO - Eval @ step 290000: avg_return=-19.20 (5 episodes)
+2025-10-21 16:12:00 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 16:14:00 - snake_rl - INFO - Eval @ step 300000: avg_return=-19.20 (5 episodes)
+2025-10-21 16:14:00 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 16:15:58 - snake_rl - INFO - Eval @ step 310000: avg_return=-12.08 (5 episodes)
+2025-10-21 16:15:58 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 16:17:59 - snake_rl - INFO - Eval @ step 320000: avg_return=-19.20 (5 episodes)
+2025-10-21 16:17:59 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 16:19:59 - snake_rl - INFO - Eval @ step 330000: avg_return=-18.80 (5 episodes)
+2025-10-21 16:20:00 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 16:22:00 - snake_rl - INFO - Eval @ step 340000: avg_return=-19.20 (5 episodes)
+2025-10-21 16:22:03 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 16:24:02 - snake_rl - INFO - Eval @ step 350000: avg_return=-15.40 (5 episodes)
+2025-10-21 16:24:06 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 16:26:04 - snake_rl - INFO - Eval @ step 360000: avg_return=-18.80 (5 episodes)
+2025-10-21 16:26:04 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 16:28:02 - snake_rl - INFO - Eval @ step 370000: avg_return=-18.40 (5 episodes)
+2025-10-21 16:28:02 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 16:30:00 - snake_rl - INFO - Eval @ step 380000: avg_return=-18.80 (5 episodes)
+2025-10-21 16:30:00 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 16:31:58 - snake_rl - INFO - Eval @ step 390000: avg_return=-18.40 (5 episodes)
+2025-10-21 16:31:59 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 16:33:56 - snake_rl - INFO - Eval @ step 400000: avg_return=-19.20 (5 episodes)
+2025-10-21 16:33:57 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 16:35:54 - snake_rl - INFO - Eval @ step 410000: avg_return=-19.20 (5 episodes)
+2025-10-21 16:35:54 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 16:37:52 - snake_rl - INFO - Eval @ step 420000: avg_return=-19.20 (5 episodes)
+2025-10-21 16:37:52 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 16:39:50 - snake_rl - INFO - Eval @ step 430000: avg_return=-19.20 (5 episodes)
+2025-10-21 16:39:50 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 16:41:48 - snake_rl - INFO - Eval @ step 440000: avg_return=-19.20 (5 episodes)
+2025-10-21 16:41:51 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 16:43:48 - snake_rl - INFO - Eval @ step 450000: avg_return=-15.78 (5 episodes)
+2025-10-21 16:43:51 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 16:45:49 - snake_rl - INFO - Eval @ step 460000: avg_return=-18.60 (5 episodes)
+2025-10-21 16:45:50 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 16:47:47 - snake_rl - INFO - Eval @ step 470000: avg_return=-18.80 (5 episodes)
+2025-10-21 16:47:47 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 16:49:45 - snake_rl - INFO - Eval @ step 480000: avg_return=-19.20 (5 episodes)
+2025-10-21 16:49:45 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 16:51:43 - snake_rl - INFO - Eval @ step 490000: avg_return=-15.29 (5 episodes)
+2025-10-21 16:51:43 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 16:53:43 - snake_rl - INFO - Eval @ step 500000: avg_return=-18.80 (5 episodes)
+2025-10-21 16:53:44 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 16:53:44 - snake_rl - INFO - Checkpoint saved: checkpoints\dqn_snake_latest.pth
+2025-10-21 16:53:44 - snake_rl - INFO - ============================================================
+2025-10-21 16:53:44 - snake_rl - INFO - Training completed in 97.1 minutes
+2025-10-21 16:53:44 - snake_rl - INFO - Best evaluation return: -1.10
+2025-10-21 16:53:44 - snake_rl - INFO - ============================================================
