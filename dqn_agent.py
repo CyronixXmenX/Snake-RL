@@ -1,8 +1,15 @@
+"""
+Deep Q-Network (DQN) Agent for Snake RL.
+
+This module implements a DQN agent with experience replay, target networks,
+and Double DQN for stable learning.
+"""
+
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
-from typing import Tuple
+from dataclasses import dataclass, asdict
+from typing import Tuple, Dict, Any, Optional
 
 import numpy as np
 import torch
@@ -12,6 +19,8 @@ import torch.optim as optim
 
 @dataclass
 class DQNConfig:
+    """Configuration for DQN agent and training."""
+    
     grid_w: int
     grid_h: int
     in_channels: int = 3
@@ -23,10 +32,28 @@ class DQNConfig:
     buffer_size: int = 100_000
     train_start: int = 10_000
     device: str = "auto"  # "cpu" | "cuda" | "auto"
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert config to dictionary."""
+        return asdict(self)
 
 
 class QNetwork(nn.Module):
-    def __init__(self, in_channels: int, num_actions: int, grid_h: int, grid_w: int):
+    """
+    Convolutional Neural Network for Q-value approximation.
+    
+    Architecture:
+    - 2 Conv2D layers for feature extraction
+    - 2 Fully connected layers for Q-value estimation
+    
+    Args:
+        in_channels: Number of input channels (3 for [head, body, food])
+        num_actions: Number of possible actions (4 for up/down/left/right)
+        grid_h: Height of the input grid
+        grid_w: Width of the input grid
+    """
+    
+    def __init__(self, in_channels: int, num_actions: int, grid_h: int, grid_w: int) -> None:
         super().__init__()
         # Small CNN for small grids
         self.features = nn.Sequential(
@@ -46,6 +73,15 @@ class QNetwork(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass through the network.
+        
+        Args:
+            x: Input tensor of shape (batch, channels, height, width)
+            
+        Returns:
+            Q-values for each action, shape (batch, num_actions)
+        """
         x = self.features(x)
         x = x.view(x.size(0), -1)
         q = self.head(x)
@@ -53,7 +89,18 @@ class QNetwork(nn.Module):
 
 
 class ReplayBuffer:
-    def __init__(self, capacity: int, obs_shape: Tuple[int, int, int]):
+    """
+    Experience replay buffer with memory-efficient uint8 storage.
+    
+    Stores transitions (state, action, reward, next_state, done) for training.
+    Uses circular buffer for constant memory usage.
+    
+    Args:
+        capacity: Maximum number of transitions to store
+        obs_shape: Shape of observations (C, H, W)
+    """
+    
+    def __init__(self, capacity: int, obs_shape: Tuple[int, int, int]) -> None:
         self.capacity = capacity
         self.obs_shape = obs_shape  # (C, H, W)
         self.ptr = 0
@@ -66,7 +113,24 @@ class ReplayBuffer:
         self.rewards = np.zeros((capacity,), dtype=np.float32)
         self.dones = np.zeros((capacity,), dtype=np.bool_)
 
-    def push(self, obs, action, reward, next_obs, done):
+    def push(
+        self, 
+        obs: np.ndarray, 
+        action: int, 
+        reward: float, 
+        next_obs: np.ndarray, 
+        done: bool
+    ) -> None:
+        """
+        Add a transition to the buffer.
+        
+        Args:
+            obs: Current observation
+            action: Action taken
+            reward: Reward received
+            next_obs: Next observation
+            done: Whether episode terminated
+        """
         self.obs[self.ptr] = obs
         self.actions[self.ptr] = action
         self.rewards[self.ptr] = reward
@@ -75,27 +139,51 @@ class ReplayBuffer:
         self.ptr = (self.ptr + 1) % self.capacity
         self.size = min(self.size + 1, self.capacity)
 
-    def sample(self, batch_size: int):
+    def sample(self, batch_size: int) -> Dict[str, np.ndarray]:
+        """
+        Sample a batch of transitions uniformly.
+        
+        Args:
+            batch_size: Number of transitions to sample
+            
+        Returns:
+            Dictionary with keys: obs, actions, rewards, next_obs, dones
+        """
         idx = np.random.randint(0, self.size, size=batch_size)
-        batch = dict(
-            obs=self.obs[idx],
-            actions=self.actions[idx],
-            rewards=self.rewards[idx],
-            next_obs=self.next_obs[idx],
-            dones=self.dones[idx],
-        )
+        batch = {
+            "obs": self.obs[idx],
+            "actions": self.actions[idx],
+            "rewards": self.rewards[idx],
+            "next_obs": self.next_obs[idx],
+            "dones": self.dones[idx],
+        }
         return batch
+    
+    def __len__(self) -> int:
+        """Return current size of the buffer."""
+        return self.size
 
 
 class DQNAgent:
-    def __init__(self, cfg: DQNConfig):
+    """
+    Deep Q-Network agent with Double DQN and experience replay.
+    
+    Features:
+    - Target network for stable learning
+    - Experience replay buffer
+    - Double DQN for reduced overestimation
+    - Gradient clipping
+    - Memory-efficient uint8 observation storage
+    
+    Args:
+        cfg: Configuration object with hyperparameters
+    """
+    
+    def __init__(self, cfg: DQNConfig) -> None:
         self.cfg = cfg
-        self.device = (
-            torch.device("cuda") if (cfg.device == "auto" and torch.cuda.is_available()) else
-            torch.device(cfg.device) if cfg.device in ("cpu", "cuda") else
-            torch.device("cpu")
-        )
+        self.device = self._get_device(cfg.device)
 
+        # Initialize networks
         self.q = QNetwork(cfg.in_channels, cfg.num_actions, cfg.grid_h, cfg.grid_w).to(self.device)
         self.target_q = QNetwork(cfg.in_channels, cfg.num_actions, cfg.grid_h, cfg.grid_w).to(self.device)
         self.target_q.load_state_dict(self.q.state_dict())
@@ -110,9 +198,28 @@ class DQNAgent:
         self.target_update = cfg.target_update
 
         self.train_steps = 0
+    
+    def _get_device(self, device_cfg: str) -> torch.device:
+        """Determine compute device based on configuration."""
+        if device_cfg == "auto":
+            return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        elif device_cfg in ("cpu", "cuda"):
+            return torch.device(device_cfg)
+        else:
+            return torch.device("cpu")
 
     @torch.no_grad()
     def act(self, obs: np.ndarray, epsilon: float) -> int:
+        """
+        Select action using epsilon-greedy policy.
+        
+        Args:
+            obs: Observation array of shape (C, H, W)
+            epsilon: Exploration rate (0 = greedy, 1 = random)
+            
+        Returns:
+            Selected action index
+        """
         if np.random.rand() < epsilon:
             return np.random.randint(0, self.cfg.num_actions)
         # obs: (C,H,W) uint8 -> float32 [0,1]
@@ -121,10 +228,20 @@ class DQNAgent:
         action = int(q_values.argmax(dim=1).item())
         return action
 
-    def push(self, *args, **kwargs):
+    def push(self, *args, **kwargs) -> None:
+        """Add transition to replay buffer."""
         self.replay.push(*args, **kwargs)
 
-    def train_step(self):
+    def train_step(self) -> Optional[float]:
+        """
+        Perform one training step (if buffer is sufficiently filled).
+        
+        Samples a batch from replay buffer, computes TD error using Double DQN,
+        and updates the Q-network. Periodically updates target network.
+        
+        Returns:
+            Loss value if training occurred, None otherwise
+        """
         if self.replay.size < self.train_start:
             return None
 
@@ -160,21 +277,40 @@ class DQNAgent:
 
         return float(loss.item())
 
-    def save(self, path: str):
+    def save(self, path: str) -> None:
+        """
+        Save agent state to disk.
+        
+        Args:
+            path: File path to save checkpoint
+        """
         os.makedirs(os.path.dirname(path), exist_ok=True)
         torch.save(
             {
                 "model": self.q.state_dict(),
                 "target_model": self.target_q.state_dict(),
-                "config": self.cfg.__dict__,
+                "optimizer": self.optim.state_dict(),
+                "config": self.cfg.to_dict(),
+                "train_steps": self.train_steps,
             },
             path,
         )
 
-    def load(self, path: str, strict: bool = True):
-        ckpt = torch.load(path, map_location=self.device)
+    def load(self, path: str, strict: bool = True) -> None:
+        """
+        Load agent state from disk.
+        
+        Args:
+            path: File path to load checkpoint from
+            strict: Whether to strictly enforce state dict matching
+        """
+        ckpt = torch.load(path, map_location=self.device, weights_only=False)
         self.q.load_state_dict(ckpt["model"], strict=strict)
         if "target_model" in ckpt:
             self.target_q.load_state_dict(ckpt["target_model"], strict=strict)
         else:
             self.target_q.load_state_dict(self.q.state_dict())
+        if "optimizer" in ckpt:
+            self.optim.load_state_dict(ckpt["optimizer"])
+        if "train_steps" in ckpt:
+            self.train_steps = ckpt["train_steps"]
