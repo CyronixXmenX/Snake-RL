@@ -1,0 +1,50 @@
+# Maximum GPU Utilization Configuration for Snake RL
+# This configuration uses vectorized environments and multiple training steps
+# to maximize GPU utilization (target: >80% GPU usage)
+
+# Environment settings
+environment:
+  grid_width: 24
+  grid_height: 20
+  step_penalty: -0.01
+  food_reward: 1.0
+  death_reward: -1.0
+
+# DQN hyperparameters (optimized for high throughput)
+dqn:
+  learning_rate: 0.0003  # Higher LR for faster convergence with more samples
+  gamma: 0.99
+  batch_size: 256  # Larger batch size for better GPU utilization
+  target_update: 1000
+  buffer_size: 200000  # Larger buffer for more diverse samples
+  train_start: 5000  # Start training earlier with parallel envs
+
+# Training settings
+training:
+  total_steps: 500000
+  seed: 1337
+  device: cuda  # Force GPU usage
+  checkpoint_dir: checkpoints
+  eval_interval: 10000
+  eval_episodes: 5
+
+# Epsilon-greedy exploration
+exploration:
+  epsilon_start: 1.0
+  epsilon_end: 0.05
+  epsilon_decay_steps: 200000
+
+# GPU optimization settings (maximum utilization)
+gpu_optimization:
+  use_amp: true  # Automatic Mixed Precision for 2-3x speedup
+  pin_memory: true  # Faster CPU-to-GPU transfers
+  gradient_accumulation_steps: 1  # No gradient accumulation with large batch
+
+# Notes:
+# - This config is designed for train_dqn_optimized.py
+# - Uses vectorized environments (default: 8 parallel envs)
+# - Multiple training steps per env step (default: 4 steps)
+# - Expected GPU utilization: 70-90% (vs 1.5% with standard training)
+# - Expected speedup: 30-50x faster than CPU, 3-5x faster than standard GPU training
+# - Requires 6GB+ GPU memory
+# - For limited memory: reduce batch_size to 128 and buffer_size to 100000

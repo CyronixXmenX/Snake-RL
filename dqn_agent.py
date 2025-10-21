@@ -242,6 +242,45 @@ class DQNAgent:
         q_values = self.q(obs_t)
         action = int(q_values.argmax(dim=1).item())
         return action
+    
+    @torch.no_grad()
+    def act_batch(self, observations: np.ndarray, epsilon: float) -> np.ndarray:
+        """
+        Select actions for a batch of observations using epsilon-greedy policy.
+        
+        This method is optimized for vectorized environments, processing multiple
+        observations in parallel on the GPU for better utilization.
+        
+        Args:
+            observations: Batch of observations, shape (batch_size, C, H, W)
+            epsilon: Exploration rate (0 = greedy, 1 = random)
+            
+        Returns:
+            Array of selected actions, shape (batch_size,)
+        """
+        batch_size = observations.shape[0]
+        
+        # Random exploration for each environment
+        explore_mask = np.random.rand(batch_size) < epsilon
+        actions = np.zeros(batch_size, dtype=np.int64)
+        
+        if explore_mask.all():
+            # All random actions
+            return np.random.randint(0, self.cfg.num_actions, size=batch_size)
+        
+        # Get greedy actions for non-exploring environments
+        obs_t = torch.from_numpy(observations).float().div(255.0)
+        if self.pin_memory:
+            obs_t = obs_t.pin_memory()
+        obs_t = obs_t.to(self.device, non_blocking=True)
+        q_values = self.q(obs_t)
+        greedy_actions = q_values.argmax(dim=1).cpu().numpy()
+        
+        # Combine random and greedy actions
+        actions[explore_mask] = np.random.randint(0, self.cfg.num_actions, size=explore_mask.sum())
+        actions[~explore_mask] = greedy_actions[~explore_mask]
+        
+        return actions
 
     def push(self, *args, **kwargs) -> None:
         """Add transition to replay buffer."""
