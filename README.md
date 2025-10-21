@@ -2,7 +2,7 @@
 
 Train a Deep Q-Network (DQN) to play Snake on a grid world that mirrors the Pygame version's mechanics.
 
-📚 **[Quick Start Guide](QUICKSTART.md)** | 🚀 **[Optimizations](OPTIMIZATIONS.md)** | 📝 **[Changelog](CHANGELOG.md)**
+📚 **[Quick Start Guide](QUICKSTART.md)** | 🚀 **[Optimizations](OPTIMIZATIONS.md)** | 🎮 **[GPU Guide](GPU_OPTIMIZATION_GUIDE.md)** | 📝 **[Changelog](CHANGELOG.md)**
 
 ## Features
 - Gymnasium environment (`SnakeEnv`) with:
@@ -18,6 +18,12 @@ Train a Deep Q-Network (DQN) to play Snake on a grid world that mirrors the Pyga
   - Target network, epsilon-greedy exploration, gradient clipping
   - Checkpointing to `checkpoints/` with optimizer state
   - YAML configuration file support
+- GPU Optimizations:
+  - Automatic Mixed Precision (AMP) for 2-3x faster GPU training
+  - Pinned memory for faster CPU-to-GPU data transfers
+  - Non-blocking data transfers for better GPU utilization
+  - Gradient accumulation for larger effective batch sizes
+  - See [GPU Optimization Guide](GPU_OPTIMIZATION_GUIDE.md) for details
 - Code Quality:
   - Comprehensive docstrings for all classes and methods
   - Full type hints throughout the codebase
@@ -93,6 +99,8 @@ python evaluate_dqn.py --model checkpoints/dqn_snake_best.pth --episodes 5 --ren
 
 ## Tips
 - Training from scratch can take time. Use CPU or GPU; PyTorch will auto-detect GPU if available.
+- For GPU acceleration, see the [GPU Optimization Guide](GPU_OPTIMIZATION_GUIDE.md).
+- Enable `--use_amp` flag for 2-3x faster training on modern GPUs.
 - You can reduce grid size (e.g., 12×10) to speed up learning initially.
 - Reward shaping matters. The provided defaults are balanced for stability, but you can adjust `--step_penalty`, `--food_reward`, and `--death_reward`.
 

@@ -82,6 +82,9 @@ def merge_config_with_args(config: Dict[str, Any], args: argparse.Namespace) -> 
         ('exploration', 'epsilon_start'): 'eps_start',
         ('exploration', 'epsilon_end'): 'eps_end',
         ('exploration', 'epsilon_decay_steps'): 'eps_decay_steps',
+        ('gpu_optimization', 'use_amp'): 'use_amp',
+        ('gpu_optimization', 'pin_memory'): 'pin_memory',
+        ('gpu_optimization', 'gradient_accumulation_steps'): 'gradient_accumulation_steps',
     }
     
     # Only update args that weren't explicitly set on command line
@@ -132,3 +135,10 @@ def add_training_arguments(parser: argparse.ArgumentParser) -> None:
                         help="Steps between evaluations")
     parser.add_argument("--eval_episodes", type=int, default=5, 
                         help="Episodes per evaluation")
+    # GPU optimization arguments
+    parser.add_argument("--use_amp", action="store_true", 
+                        help="Use automatic mixed precision (AMP) for faster GPU training")
+    parser.add_argument("--pin_memory", action="store_true", default=True,
+                        help="Pin memory for faster data transfer to GPU (enabled by default)")
+    parser.add_argument("--gradient_accumulation_steps", type=int, default=1,
+                        help="Number of gradient accumulation steps (effective batch size = batch_size * gradient_accumulation_steps)")
