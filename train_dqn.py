@@ -2,7 +2,7 @@
 Training script for DQN agent on Snake environment.
 
 Trains a Deep Q-Network agent with configurable hyperparameters and
-saves checkpoints periodically.
+saves checkpoints periodically. Supports loading configuration from YAML files.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from tqdm import trange
 
 from snake_env import SnakeEnv
 from dqn_agent import DQNAgent, DQNConfig
+from config_utils import load_config, merge_config_with_args, add_training_arguments
 
 
 def linear_epsilon(step: int, start: float, end: float, decay_steps: int) -> float:
@@ -68,31 +69,14 @@ def evaluate(agent: DQNAgent, env: SnakeEnv, episodes: int = 5) -> float:
 def main() -> None:
     """Main training loop."""
     parser = argparse.ArgumentParser(description="Train DQN agent on Snake environment")
-    parser.add_argument("--grid_w", type=int, default=24, help="Grid width")
-    parser.add_argument("--grid_h", type=int, default=20, help="Grid height")
-    parser.add_argument("--total_steps", type=int, default=500_000, help="Total training steps")
-    parser.add_argument("--batch_size", type=int, default=64, help="Batch size for training")
-    parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
-    parser.add_argument("--gamma", type=float, default=0.99, help="Discount factor")
-    parser.add_argument("--buffer_size", type=int, default=100_000, help="Replay buffer size")
-    parser.add_argument("--train_start", type=int, default=10_000, help="Steps before training starts")
-    parser.add_argument("--target_update", type=int, default=1000, help="Steps between target network updates")
-    parser.add_argument("--eps_start", type=float, default=1.0, help="Initial epsilon")
-    parser.add_argument("--eps_end", type=float, default=0.05, help="Final epsilon")
-    parser.add_argument("--eps_decay_steps", type=int, default=200_000, help="Epsilon decay steps")
-    parser.add_argument("--step_penalty", type=float, default=-0.01, help="Penalty for each step")
-    parser.add_argument("--food_reward", type=float, default=1.0, help="Reward for eating food")
-    parser.add_argument("--death_reward", type=float, default=-1.0, help="Penalty for dying")
-    parser.add_argument("--seed", type=int, default=1337, help="Random seed")
-    parser.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda"], 
-                        help="Compute device")
-    parser.add_argument("--checkpoint_dir", type=str, default="checkpoints", 
-                        help="Directory for saving checkpoints")
-    parser.add_argument("--eval_interval", type=int, default=10_000, 
-                        help="Steps between evaluations")
-    parser.add_argument("--eval_episodes", type=int, default=5, 
-                        help="Episodes per evaluation")
+    add_training_arguments(parser)
     args = parser.parse_args()
+    
+    # Load config file if provided
+    if args.config:
+        config = load_config(args.config)
+        args = merge_config_with_args(config, args)
+        print(f"Loaded configuration from: {args.config}")
 
     # Create environment
     env = SnakeEnv(

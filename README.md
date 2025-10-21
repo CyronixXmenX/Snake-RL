@@ -8,11 +8,18 @@ Train a Deep Q-Network (DQN) to play Snake on a grid world that mirrors the Pyga
   - Discrete actions: 0=Up, 1=Down, 2=Left, 3=Right
   - Reverse-direction input is ignored (like the Pygame game)
   - Rewards: +1 (eat), -1 (death), -0.01 (step)
+  - Optimized collision detection with cached snake positions
 - DQN with:
   - CNN backbone suitable for small grids (default 24×20)
   - Experience replay with uint8 observation storage for memory efficiency
+  - Double DQN for reduced Q-value overestimation
   - Target network, epsilon-greedy exploration, gradient clipping
-  - Checkpointing to `checkpoints/`
+  - Checkpointing to `checkpoints/` with optimizer state
+  - YAML configuration file support
+- Code Quality:
+  - Comprehensive docstrings for all classes and methods
+  - Full type hints throughout the codebase
+  - Improved error handling and validation
 
 ## Setup
 1. Install dependencies:
@@ -21,6 +28,22 @@ Train a Deep Q-Network (DQN) to play Snake on a grid world that mirrors the Pyga
    ```
 
 2. (Optional) If you want to visualize evaluation with Pygame later, ensure your system has a display (or use a virtual framebuffer on headless servers).
+
+## Configuration
+You can configure training parameters using either command-line arguments or a YAML configuration file.
+
+### Using Config File (Recommended)
+Create a `config.yaml` file (see `config.yaml` for an example):
+```bash
+python train_dqn.py --config config.yaml
+```
+
+### Using Command-Line Arguments
+```bash
+python train_dqn.py --grid_w 24 --grid_h 20 --total_steps 500000 --lr 0.0001
+```
+
+Command-line arguments override config file settings.
 
 ## Train
 ```bash
@@ -47,13 +70,17 @@ python evaluate_dqn.py --model checkpoints/dqn_snake_best.pth --episodes 5 --ren
 
 - Without `--render True`, it runs headless and prints scores.
 - With `--render True`, it opens a Pygame window to visualize.
+- Fixed `--render` argument parsing to properly accept True/False values.
 
 ## Files
 - `snake_env.py` — Gymnasium environment for Snake
 - `dqn_agent.py` — DQN model, replay buffer, agent utilities
-- `train_dqn.py` — Training loop
+- `train_dqn.py` — Training loop with config file support
 - `evaluate_dqn.py` — Run trained model with optional rendering
+- `config_utils.py` — Configuration management utilities
+- `config.yaml` — Example configuration file
 - `requirements.txt` — Python dependencies
+- `main.py` — Manual play Snake game (Pygame)
 
 ## Tips
 - Training from scratch can take time. Use CPU or GPU; PyTorch will auto-detect GPU if available.
