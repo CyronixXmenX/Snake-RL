@@ -2,9 +2,9 @@
 
 Train a Deep Q-Network (DQN) to play Snake on a grid world that mirrors the Pygame version's mechanics.
 
-> **⚡ NEW: GPU Optimization!** Standard training was using only **1.5% of GPU**. The new optimized training achieves **70-90% GPU utilization** for **8x faster training**! See [Quick Start](#-maximum-gpu-utilization-new) below.
+> **⚡ GPU Optimization Fixed!** Previous "optimizations" were actually making training slower. Now fixed - training is faster and uses less resources! See [GPU Optimization Fixes](GPU_OPTIMIZATION_FIXES.md) for details.
 
-🚀 **[Optimizations](OPTIMIZATIONS.md)** | 🎮 **[GPU Guide](GPU_OPTIMIZATION_GUIDE.md)** | 📝 **[Changelog](CHANGELOG.md)**
+🚀 **[Optimizations](OPTIMIZATIONS.md)** | 🎮 **[GPU Guide](GPU_OPTIMIZATION_GUIDE.md)** | 📝 **[Changelog](CHANGELOG.md)** | 🔧 **[Fixes](GPU_OPTIMIZATION_FIXES.md)**
 
 ---
 
@@ -27,7 +27,7 @@ python train_dqn.py --config config.yaml
 python train_dqn.py --config config_gpu.yaml
 ```
 
-**Maximum GPU Utilization (70-90% GPU usage, 8x faster than standard GPU):**
+**Vectorized Training (uses multiple parallel environments):**
 ```bash
 python train_dqn_optimized.py --config config_gpu_optimized.yaml
 ```
@@ -78,8 +78,8 @@ training:
   device: auto  # auto, cpu, or cuda
 
 gpu_optimization:
-  use_amp: false
-  pin_memory: true
+  use_amp: false  # Enable for 2-3x speedup on modern GPUs
+  pin_memory: false  # Usually not needed (adds overhead)
 ```
 
 ### Command-Line Overrides

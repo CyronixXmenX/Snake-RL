@@ -34,7 +34,7 @@ class DQNConfig:
     device: str = "auto"  # "cpu" | "cuda" | "auto"
     # GPU optimization settings
     use_amp: bool = False  # Automatic Mixed Precision for faster GPU training
-    pin_memory: bool = True  # Pin memory for faster data transfer to GPU
+    pin_memory: bool = False  # Pin memory for faster data transfer to GPU (may add overhead)
     gradient_accumulation_steps: int = 1  # Gradient accumulation for larger effective batch sizes
     
     def to_dict(self) -> Dict[str, Any]:
@@ -235,10 +235,7 @@ class DQNAgent:
         if np.random.rand() < epsilon:
             return np.random.randint(0, self.cfg.num_actions)
         # obs: (C,H,W) uint8 -> float32 [0,1]
-        obs_t = torch.from_numpy(obs).float().div(255.0).unsqueeze(0)
-        if self.pin_memory:
-            obs_t = obs_t.pin_memory()
-        obs_t = obs_t.to(self.device, non_blocking=True)
+        obs_t = torch.from_numpy(obs).float().div(255.0).unsqueeze(0).to(self.device)
         q_values = self.q(obs_t)
         action = int(q_values.argmax(dim=1).item())
         return action
@@ -269,10 +266,7 @@ class DQNAgent:
             return np.random.randint(0, self.cfg.num_actions, size=batch_size)
         
         # Get greedy actions for non-exploring environments
-        obs_t = torch.from_numpy(observations).float().div(255.0)
-        if self.pin_memory:
-            obs_t = obs_t.pin_memory()
-        obs_t = obs_t.to(self.device, non_blocking=True)
+        obs_t = torch.from_numpy(observations).float().div(255.0).to(self.device)
         q_values = self.q(obs_t)
         greedy_actions = q_values.argmax(dim=1).cpu().numpy()
         
@@ -302,27 +296,12 @@ class DQNAgent:
 
         batch = self.replay.sample(self.batch_size)
         
-        # Convert to tensors with optional pin memory for faster transfer
-        obs = torch.from_numpy(batch["obs"]).float().div(255.0)
-        next_obs = torch.from_numpy(batch["next_obs"]).float().div(255.0)
-        actions = torch.from_numpy(batch["actions"]).long()
-        rewards = torch.from_numpy(batch["rewards"]).float()
-        dones = torch.from_numpy(batch["dones"]).float()
-        
-        # Pin memory if enabled for faster GPU transfer
-        if self.pin_memory:
-            obs = obs.pin_memory()
-            next_obs = next_obs.pin_memory()
-            actions = actions.pin_memory()
-            rewards = rewards.pin_memory()
-            dones = dones.pin_memory()
-        
-        # Transfer to device (non-blocking if pinned memory)
-        obs = obs.to(self.device, non_blocking=self.pin_memory)
-        next_obs = next_obs.to(self.device, non_blocking=self.pin_memory)
-        actions = actions.to(self.device, non_blocking=self.pin_memory)
-        rewards = rewards.to(self.device, non_blocking=self.pin_memory)
-        dones = dones.to(self.device, non_blocking=self.pin_memory)
+        # Convert to tensors and transfer to device
+        obs = torch.from_numpy(batch["obs"]).float().div(255.0).to(self.device)
+        next_obs = torch.from_numpy(batch["next_obs"]).float().div(255.0).to(self.device)
+        actions = torch.from_numpy(batch["actions"]).long().to(self.device)
+        rewards = torch.from_numpy(batch["rewards"]).float().to(self.device)
+        dones = torch.from_numpy(batch["dones"]).float().to(self.device)
 
         # Forward pass with optional automatic mixed precision
         with torch.amp.autocast(device_type=self.device.type, enabled=self.use_amp):

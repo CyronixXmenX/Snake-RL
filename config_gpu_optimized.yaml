@@ -37,7 +37,7 @@ exploration:
 # GPU optimization settings (maximum utilization)
 gpu_optimization:
   use_amp: true  # Automatic Mixed Precision for 2-3x speedup
-  pin_memory: true  # Faster CPU-to-GPU transfers
+  pin_memory: false  # Disabled by default (adds overhead for small batches)
   gradient_accumulation_steps: 1  # No gradient accumulation with large batch
 
 # Notes:

@@ -104,10 +104,11 @@ python train_dqn_optimized.py \
   - Too many = CPU bottleneck
   - Recommended: 4-16
 
-- **`--train_freq`** (default: 4): Training steps per environment step
-  - Higher = GPU stays busier
-  - Too high = may overtrain on limited data
-  - Recommended: 2-8
+- **`--train_freq`** (default: 1): Training steps per environment step
+  - Higher values train multiple times on the same batch of data
+  - Default of 1 is usually optimal (same as standard training)
+  - Only increase if you have specific reasons to do multiple gradient updates per env step
+  - Recommended: 1
 
 - **`--batch_size`** (default: 256): Samples per training batch
   - Larger = better GPU utilization
@@ -167,24 +168,25 @@ gpu_optimization:
 Pinned (page-locked) memory enables faster CPU-to-GPU data transfers through DMA (Direct Memory Access).
 
 **Benefits:**
-- 2-3x faster data transfer from CPU to GPU
+- Can speed up data transfer from CPU to GPU for large batches
 - Enables asynchronous data transfers (non-blocking)
-- Minimal CPU overhead
+
+**Trade-offs:**
+- Adds overhead for small batch sizes (< 256)
+- Increases CPU memory pressure
+- May not provide benefit for typical RL training workloads
 
 **How to enable:**
 ```bash
-# Enabled by default when using GPU
+# Disabled by default (adds overhead for small batches)
 python train_dqn.py --pin_memory
-
-# Disable if needed
-python train_dqn.py --no-pin_memory  # (not implemented, use config file)
 
 # Config file (config.yaml)
 gpu_optimization:
-  pin_memory: true  # default: true
+  pin_memory: false  # default: false
 ```
 
-**Note:** Automatically disabled when running on CPU.
+**Note:** Automatically disabled when running on CPU. Only enable if you're using large batch sizes (>= 256) and profile to confirm it helps.
 
 ### 3. Gradient Accumulation
 
@@ -489,6 +491,13 @@ print(f"Pin memory: {agent.pin_memory}")
 - [PyTorch Performance Tuning Guide](https://pytorch.org/tutorials/recipes/recipes/tuning_guide.html)
 
 ## Changelog
+
+### v1.1.1 - Performance Fixes
+- **Fixed:** Disabled pin_memory by default (was adding overhead for small batches)
+- **Fixed:** Reduced train_freq default from 4 to 1 (training multiple times on same data was wasteful)
+- **Fixed:** Simplified tensor operations to reduce overhead
+- **Fixed:** Removed non-blocking transfers that could cause synchronization issues
+- **Result:** Training is now faster and uses less resources as intended
 
 ### v1.1.0 - GPU Optimizations
 - Added Automatic Mixed Precision (AMP) support

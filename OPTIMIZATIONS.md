@@ -38,10 +38,10 @@ This document summarizes all optimizations and upgrades made to the Snake ML cod
 
 ### 3. GPU Optimizations (New!)
 - **Automatic Mixed Precision (AMP)** for 2-3x faster training on modern GPUs
-- **Pinned memory** for faster CPU-to-GPU data transfers
-- **Non-blocking transfers** for better GPU utilization
+- **Pinned memory** (optional, disabled by default) for large batch transfers
 - **Gradient accumulation** for larger effective batch sizes
 - **Device-aware optimizations** that automatically disable on CPU
+- **Optimized tensor operations** with minimal overhead
 - See [GPU Optimization Guide](GPU_OPTIMIZATION_GUIDE.md) for detailed information
 
 ### 4. Benchmark Results
