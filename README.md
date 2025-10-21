@@ -2,6 +2,8 @@
 
 Train a Deep Q-Network (DQN) to play Snake on a grid world that mirrors the Pygame version's mechanics.
 
+📚 **[Quick Start Guide](QUICKSTART.md)** | 🚀 **[Optimizations](OPTIMIZATIONS.md)** | 📝 **[Changelog](CHANGELOG.md)**
+
 ## Features
 - Gymnasium environment (`SnakeEnv`) with:
   - 3-channel observation: [head, body, food] on a H×W grid
