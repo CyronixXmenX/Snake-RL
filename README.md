@@ -37,6 +37,11 @@ Train a Deep Q-Network (DQN) to play Snake on a grid world that mirrors the Pyga
 
 2. (Optional) If you want to visualize evaluation with Pygame later, ensure your system has a display (or use a virtual framebuffer on headless servers).
 
+3. (Optional) For GPU acceleration, ensure CUDA is installed and PyTorch detects your GPU:
+   ```bash
+   python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
+   ```
+
 ## Configuration
 You can configure training parameters using either command-line arguments or a YAML configuration file.
 
@@ -73,6 +78,22 @@ Or use a configuration file:
 python train_dqn.py --config config.yaml
 ```
 
+### GPU-Accelerated Training
+
+For 10-20x faster training on NVIDIA GPUs:
+```bash
+# Using command line
+python train_dqn.py --use_amp --batch_size 128
+
+# Or use the GPU-optimized config
+python train_dqn.py --config config_gpu.yaml
+
+# Run the GPU example
+python example_gpu.py
+```
+
+See [GPU Optimization Guide](GPU_OPTIMIZATION_GUIDE.md) for detailed information.
+
 - Checkpoints are written to `checkpoints/dqn_snake_latest.pth` and best average score to `checkpoints/dqn_snake_best.pth`.
 - Training logs are saved to `checkpoints/training.log` by default.
 - Default grid is 24×20 to match the Pygame version.
@@ -94,8 +115,11 @@ python evaluate_dqn.py --model checkpoints/dqn_snake_best.pth --episodes 5 --ren
 - `config_utils.py` — Configuration management utilities
 - `logger_utils.py` — Structured logging for training
 - `config.yaml` — Example configuration file
+- `config_gpu.yaml` — GPU-optimized configuration example
+- `example_gpu.py` — Example script demonstrating GPU optimizations
 - `requirements.txt` — Python dependencies
 - `main.py` — Manual play Snake game (Pygame)
+- `benchmark.py` — Performance benchmarking utilities
 
 ## Tips
 - Training from scratch can take time. Use CPU or GPU; PyTorch will auto-detect GPU if available.
