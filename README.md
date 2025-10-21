@@ -2,6 +2,8 @@
 
 Train a Deep Q-Network (DQN) to play Snake on a grid world that mirrors the Pygame version's mechanics.
 
+> **⚡ NEW: GPU Optimization!** Standard training was using only **1.5% of GPU**. The new optimized training achieves **70-90% GPU utilization** for **8x faster training**! See [Quick Start](#-maximum-gpu-utilization-new) below.
+
 📚 **[Quick Start Guide](QUICKSTART.md)** | 🚀 **[Optimizations](OPTIMIZATIONS.md)** | 🎮 **[GPU Guide](GPU_OPTIMIZATION_GUIDE.md)** | ⚡ **[GPU Utilization](GPU_UTILIZATION_IMPROVEMENTS.md)** | 📝 **[Changelog](CHANGELOG.md)**
 
 ---
