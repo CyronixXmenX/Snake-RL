@@ -178,7 +178,7 @@ def main() -> None:
         next_obs, reward, terminated, truncated, info = env.step(action)
         done = terminated or truncated
 
-        agent.push(obs, action, reward, next_obs, done)
+        agent.push(obs, action, reward, next_obs, terminated)
         loss = agent.train_step()
 
         obs = next_obs
