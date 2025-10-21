@@ -60,7 +60,13 @@ python train_dqn.py \
   --step_penalty -0.01 --food_reward 1.0 --death_reward -1.0
 ```
 
+Or use a configuration file:
+```bash
+python train_dqn.py --config config.yaml
+```
+
 - Checkpoints are written to `checkpoints/dqn_snake_latest.pth` and best average score to `checkpoints/dqn_snake_best.pth`.
+- Training logs are saved to `checkpoints/training.log` by default.
 - Default grid is 24×20 to match the Pygame version.
 
 ## Evaluate (watch the trained agent)
@@ -78,6 +84,7 @@ python evaluate_dqn.py --model checkpoints/dqn_snake_best.pth --episodes 5 --ren
 - `train_dqn.py` — Training loop with config file support
 - `evaluate_dqn.py` — Run trained model with optional rendering
 - `config_utils.py` — Configuration management utilities
+- `logger_utils.py` — Structured logging for training
 - `config.yaml` — Example configuration file
 - `requirements.txt` — Python dependencies
 - `main.py` — Manual play Snake game (Pygame)

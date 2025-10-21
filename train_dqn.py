@@ -19,6 +19,7 @@ from tqdm import trange
 from snake_env import SnakeEnv
 from dqn_agent import DQNAgent, DQNConfig
 from config_utils import load_config, merge_config_with_args, add_training_arguments
+from logger_utils import setup_logger, TrainingLogger
 
 
 def linear_epsilon(step: int, start: float, end: float, decay_steps: int) -> float:
@@ -70,6 +71,10 @@ def main() -> None:
     """Main training loop."""
     parser = argparse.ArgumentParser(description="Train DQN agent on Snake environment")
     add_training_arguments(parser)
+    parser.add_argument("--log_file", type=str, default=None,
+                        help="Path to log file (default: logs/training.log)")
+    parser.add_argument("--no_console_log", action="store_true",
+                        help="Disable console logging")
     args = parser.parse_args()
     
     # Load config file if provided
@@ -77,6 +82,44 @@ def main() -> None:
         config = load_config(args.config)
         args = merge_config_with_args(config, args)
         print(f"Loaded configuration from: {args.config}")
+    
+    # Setup logging
+    log_file = args.log_file or os.path.join(args.checkpoint_dir, "training.log")
+    logger = setup_logger(
+        name="snake_rl",
+        log_file=log_file,
+        console=not args.no_console_log
+    )
+    train_logger = TrainingLogger(logger)
+    
+    # Log configuration
+    train_logger.log_config({
+        "Environment": {
+            "grid_width": args.grid_w,
+            "grid_height": args.grid_h,
+            "step_penalty": args.step_penalty,
+            "food_reward": args.food_reward,
+            "death_reward": args.death_reward,
+        },
+        "DQN": {
+            "learning_rate": args.lr,
+            "gamma": args.gamma,
+            "batch_size": args.batch_size,
+            "target_update": args.target_update,
+            "buffer_size": args.buffer_size,
+            "train_start": args.train_start,
+        },
+        "Training": {
+            "total_steps": args.total_steps,
+            "seed": args.seed,
+            "device": args.device,
+        },
+        "Exploration": {
+            "epsilon_start": args.eps_start,
+            "epsilon_end": args.eps_end,
+            "epsilon_decay_steps": args.eps_decay_steps,
+        }
+    })
 
     # Create environment
     env = SnakeEnv(
@@ -102,6 +145,7 @@ def main() -> None:
         device=args.device,
     )
     agent = DQNAgent(cfg)
+    train_logger.log_training_start(args.total_steps, str(agent.device))
 
     # Setup checkpoints
     os.makedirs(args.checkpoint_dir, exist_ok=True)
@@ -153,18 +197,22 @@ def main() -> None:
         # Periodic evaluation and checkpointing
         if (step + 1) % args.eval_interval == 0:
             eval_ret = evaluate(agent, env, episodes=args.eval_episodes)
+            train_logger.log_eval(step + 1, eval_ret, args.eval_episodes)
             if eval_ret > best_avg_return:
                 best_avg_return = eval_ret
                 agent.save(best_ckpt)
-            agent.save(latest_ckpt)
+                train_logger.log_checkpoint(best_ckpt, is_best=True)
+            else:
+                agent.save(latest_ckpt)
+                train_logger.log_checkpoint(latest_ckpt, is_best=False)
 
     # Final save
     agent.save(latest_ckpt)
+    train_logger.log_checkpoint(latest_ckpt, is_best=False)
     env.close()
     
     dt = time.time() - t0
-    print(f"\nTraining complete in {dt/60:.1f} min.")
-    print(f"Best evaluation avg return: {best_avg_return:.2f}")
+    train_logger.log_training_end(dt / 60, best_avg_return)
 
 
 def evaluate(agent: DQNAgent, env: SnakeEnv, episodes: int = 5) -> float:

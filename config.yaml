@@ -32,3 +32,9 @@ exploration:
   epsilon_start: 1.0
   epsilon_end: 0.05
   epsilon_decay_steps: 200000
+
+# Logging (optional)
+# Uncomment and configure as needed
+# logging:
+#   log_file: logs/training.log
+#   no_console_log: false
