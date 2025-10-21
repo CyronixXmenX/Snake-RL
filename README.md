@@ -4,7 +4,84 @@ Train a Deep Q-Network (DQN) to play Snake on a grid world that mirrors the Pyga
 
 📚 **[Quick Start Guide](QUICKSTART.md)** | 🚀 **[Optimizations](OPTIMIZATIONS.md)** | 🎮 **[GPU Guide](GPU_OPTIMIZATION_GUIDE.md)** | 📝 **[Changelog](CHANGELOG.md)**
 
-## Features
+---
+
+## 🚀 Quick Start (Copy & Run)
+
+### 1. Install Dependencies
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Start Training (Choose One)
+
+**Basic CPU Training:**
+```bash
+python train_dqn.py --config config.yaml
+```
+
+**GPU-Accelerated Training (15-20x faster):**
+```bash
+python train_dqn.py --config config_gpu.yaml
+```
+
+**Custom Quick Training (100k steps):**
+```bash
+python train_dqn.py --total_steps 100000 --eval_interval 5000
+```
+
+### 3. Watch Your Trained Agent
+```bash
+python evaluate_dqn.py --model checkpoints/dqn_snake_best.pth --episodes 5 --render True
+```
+
+### 4. Play Manually (Optional)
+```bash
+python main.py
+```
+Use arrow keys or WASD to control the snake.
+
+---
+
+## ⚙️ Configuration
+
+### Using Config Files (Recommended)
+```bash
+# CPU-optimized training
+python train_dqn.py --config config.yaml
+
+# GPU-optimized training
+python train_dqn.py --config config_gpu.yaml
+```
+
+### Creating Custom Config
+Create your own `my_config.yaml`:
+```yaml
+environment:
+  grid_width: 24
+  grid_height: 20
+
+dqn:
+  learning_rate: 0.0001
+  batch_size: 64
+  buffer_size: 100000
+
+training:
+  total_steps: 500000
+  device: auto  # auto, cpu, or cuda
+
+gpu_optimization:
+  use_amp: false
+  pin_memory: true
+```
+
+### Command-Line Overrides
+Command-line arguments override config file settings:
+```bash
+python train_dqn.py --config config.yaml --total_steps 100000 --lr 0.0002
+```
+
+## 📊 Features
 - Gymnasium environment (`SnakeEnv`) with:
   - 3-channel observation: [head, body, food] on a H×W grid
   - Discrete actions: 0=Up, 1=Down, 2=Left, 3=Right
@@ -29,105 +106,237 @@ Train a Deep Q-Network (DQN) to play Snake on a grid world that mirrors the Pyga
   - Full type hints throughout the codebase
   - Improved error handling and validation
 
-## Setup
-1. Install dependencies:
+## 💻 Setup & Installation
+
+### Prerequisites
+- Python 3.8 or higher
+- (Optional) NVIDIA GPU with CUDA support for faster training
+
+### Installation Steps
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/CyronixXmenX/snake-ml.git
+   cd snake-ml
+   ```
+
+2. **Install dependencies:**
    ```bash
    pip install -r requirements.txt
    ```
 
-2. (Optional) If you want to visualize evaluation with Pygame later, ensure your system has a display (or use a virtual framebuffer on headless servers).
-
-3. (Optional) For GPU acceleration, ensure CUDA is installed and PyTorch detects your GPU:
+3. **Verify installation:**
    ```bash
-   python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
+   python -c "from snake_env import SnakeEnv; from dqn_agent import DQNAgent; print('✓ Installation successful!')"
    ```
 
-## Configuration
-You can configure training parameters using either command-line arguments or a YAML configuration file.
+### GPU Setup (Optional - For 15-20x Speedup)
 
-### Using Config File (Recommended)
-Create a `config.yaml` file (see `config.yaml` for an example):
+**Check if GPU is available:**
 ```bash
+python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); print(f'GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"N/A\"}')"
+```
+
+**If GPU is available, you're ready to use GPU training!** The scripts will automatically use GPU when available.
+
+**If GPU is not detected:**
+- Install CUDA Toolkit: https://developer.nvidia.com/cuda-downloads
+- Reinstall PyTorch with CUDA support: https://pytorch.org/get-started/locally/
+
+## 🎯 Usage
+
+### Training Your Agent
+
+#### Option 1: Quick Start with Config (Recommended)
+```bash
+# CPU training (works everywhere)
 python train_dqn.py --config config.yaml
+
+# GPU training (15-20x faster if you have NVIDIA GPU)
+python train_dqn.py --config config_gpu.yaml
 ```
 
-### Using Command-Line Arguments
-```bash
-python train_dqn.py --grid_w 24 --grid_h 20 --total_steps 500000 --lr 0.0001
-```
-
-Command-line arguments override config file settings.
-
-## Train
+#### Option 2: Command Line Arguments
 ```bash
 python train_dqn.py \
   --grid_w 24 --grid_h 20 \
   --total_steps 500000 \
   --batch_size 64 \
-  --lr 1e-4 \
-  --gamma 0.99 \
-  --buffer_size 100000 \
-  --train_start 10000 \
-  --target_update 1000 \
-  --eps_start 1.0 --eps_end 0.05 --eps_decay_steps 200000 \
-  --step_penalty -0.01 --food_reward 1.0 --death_reward -1.0
+  --lr 0.0001 \
+  --gamma 0.99
 ```
 
-Or use a configuration file:
+#### Option 3: GPU-Optimized Training (Maximum Performance)
 ```bash
-python train_dqn.py --config config.yaml
+# All GPU optimizations enabled
+python train_dqn.py \
+  --device cuda \
+  --use_amp \
+  --pin_memory \
+  --batch_size 128 \
+  --lr 0.0002 \
+  --total_steps 500000
 ```
 
-### GPU-Accelerated Training
+**Training Progress:**
+- Checkpoints saved to `checkpoints/dqn_snake_latest.pth`
+- Best model saved to `checkpoints/dqn_snake_best.pth`
+- Training logs in `checkpoints/training.log`
+- Monitor with: `tail -f checkpoints/training.log`
 
-For 10-20x faster training on NVIDIA GPUs:
+### Evaluating Your Agent
+
+#### Watch the Agent Play (with visualization)
 ```bash
-# Using command line
-python train_dqn.py --use_amp --batch_size 128
+python evaluate_dqn.py \
+  --model checkpoints/dqn_snake_best.pth \
+  --episodes 5 \
+  --render True \
+  --step_delay 0.1
+```
 
-# Or use the GPU-optimized config
-python train_dqn.py --config config_gpu.yaml
+#### Quick Performance Test (no visualization)
+```bash
+python evaluate_dqn.py \
+  --model checkpoints/dqn_snake_best.pth \
+  --episodes 10 \
+  --render False
+```
 
-# Run the GPU example
+### Testing GPU Performance
+
+Run the GPU example to verify optimizations:
+```bash
 python example_gpu.py
 ```
 
-See [GPU Optimization Guide](GPU_OPTIMIZATION_GUIDE.md) for detailed information.
-
-- Checkpoints are written to `checkpoints/dqn_snake_latest.pth` and best average score to `checkpoints/dqn_snake_best.pth`.
-- Training logs are saved to `checkpoints/training.log` by default.
-- Default grid is 24×20 to match the Pygame version.
-
-## Evaluate (watch the trained agent)
+Run benchmarks to compare CPU vs GPU:
 ```bash
-python evaluate_dqn.py --model checkpoints/dqn_snake_best.pth --episodes 5 --render True
+python benchmark.py
 ```
 
-- Without `--render True`, it runs headless and prints scores.
-- With `--render True`, it opens a Pygame window to visualize.
-- Fixed `--render` argument parsing to properly accept True/False values.
+## 🚀 GPU Training (15-20x Faster!)
 
-## Files
+### Ready-to-Use GPU Commands
+
+#### Quick GPU Training
+```bash
+# Use pre-configured GPU settings
+python train_dqn.py --config config_gpu.yaml
+```
+
+#### Maximum Performance GPU Training
+```bash
+python train_dqn.py \
+  --device cuda \
+  --use_amp \
+  --pin_memory \
+  --batch_size 128 \
+  --lr 0.0002 \
+  --total_steps 500000 \
+  --gradient_accumulation_steps 1
+```
+
+#### GPU Training with Limited Memory
+```bash
+# For GPUs with 4-6GB memory
+python train_dqn.py \
+  --device cuda \
+  --use_amp \
+  --batch_size 32 \
+  --buffer_size 50000 \
+  --gradient_accumulation_steps 4
+```
+
+### GPU Features Explained
+
+- **`--use_amp`**: Automatic Mixed Precision - 2-3x faster training
+- **`--pin_memory`**: Faster CPU-to-GPU data transfer
+- **`--gradient_accumulation_steps`**: Simulate larger batch sizes
+- **`--device cuda`**: Force GPU usage (auto-detected by default)
+
+### Check GPU Status
+```bash
+# Simple check
+python -c "import torch; print(f'CUDA: {torch.cuda.is_available()}')"
+
+# Detailed check
+python example_gpu.py
+```
+
+**For detailed GPU optimization information, see [GPU Optimization Guide](GPU_OPTIMIZATION_GUIDE.md)**
+
+## 📁 Project Files
+
+- `train_dqn.py` — Main training script
+- `evaluate_dqn.py` — Evaluate trained models
+- `main.py` — Manual play Snake game (Pygame)
 - `snake_env.py` — Gymnasium environment for Snake
 - `dqn_agent.py` — DQN model, replay buffer, agent utilities
-- `train_dqn.py` — Training loop with config file support
-- `evaluate_dqn.py` — Run trained model with optional rendering
-- `config_utils.py` — Configuration management utilities
-- `logger_utils.py` — Structured logging for training
-- `config.yaml` — Example configuration file
-- `config_gpu.yaml` — GPU-optimized configuration example
-- `example_gpu.py` — Example script demonstrating GPU optimizations
+- `config.yaml` — CPU training configuration
+- `config_gpu.yaml` — GPU-optimized configuration
+- `example_gpu.py` — GPU optimization demo
+- `benchmark.py` — Performance benchmarking
+- `config_utils.py` — Configuration management
+- `logger_utils.py` — Training logging utilities
 - `requirements.txt` — Python dependencies
-- `main.py` — Manual play Snake game (Pygame)
-- `benchmark.py` — Performance benchmarking utilities
 
-## Tips
-- Training from scratch can take time. Use CPU or GPU; PyTorch will auto-detect GPU if available.
-- For GPU acceleration, see the [GPU Optimization Guide](GPU_OPTIMIZATION_GUIDE.md).
-- Enable `--use_amp` flag for 2-3x faster training on modern GPUs.
-- You can reduce grid size (e.g., 12×10) to speed up learning initially.
-- Reward shaping matters. The provided defaults are balanced for stability, but you can adjust `--step_penalty`, `--food_reward`, and `--death_reward`.
+## 💡 Tips & Best Practices
+- **Start Small**: Try training with `--total_steps 100000` first to verify everything works
+- **Monitor Training**: Use `tail -f checkpoints/training.log` to watch progress in real-time
+- **GPU Acceleration**: Enable `--use_amp` for 2-3x faster training on modern NVIDIA GPUs
+- **Smaller Grids Learn Faster**: Try 12×10 grid for faster learning, then scale to 24×20
+- **Reward Shaping**: Adjust `--step_penalty`, `--food_reward`, `--death_reward` for different behaviors
+- **Save GPU Memory**: Use `--gradient_accumulation_steps 4` with smaller `--batch_size 32` if you get OOM errors
 
-## Compatibility with your Pygame Snake
-- Mechanics mirror the Pygame game: grid movement, no direct reverse, food spawn not on snake, same collision rules.
-- This environment trains headless. To reuse your existing `main.py` for visualization, you can adapt it to read actions from the agent each tick. Alternatively, use `evaluate_dqn.py` to visualize directly.
+## 🔧 Troubleshooting
+
+### Training is slow
+```bash
+# Enable GPU optimizations
+python train_dqn.py --config config_gpu.yaml
+
+# Or manually enable AMP
+python train_dqn.py --use_amp --batch_size 128
+```
+
+### CUDA Out of Memory
+```bash
+# Reduce batch size and buffer
+python train_dqn.py --batch_size 32 --buffer_size 50000
+
+# Or use gradient accumulation
+python train_dqn.py --batch_size 32 --gradient_accumulation_steps 4
+```
+
+### Pygame Display Issues (Headless Server)
+```bash
+# Disable rendering
+python evaluate_dqn.py --model checkpoints/dqn_snake_best.pth --render False
+```
+
+### Import/Module Errors
+```bash
+# Reinstall dependencies
+pip install -r requirements.txt --upgrade
+```
+
+## 🎮 Compatibility with Pygame Snake
+- Mechanics mirror the Pygame game: grid movement, no direct reverse, food spawn not on snake, same collision rules
+- Training is headless for speed. Use `evaluate_dqn.py --render True` to visualize the trained agent
+- You can adapt `main.py` to read actions from the agent for live visualization
+
+## 📚 Additional Resources
+
+- **[QUICKSTART.md](QUICKSTART.md)** - Get started in under 5 minutes
+- **[GPU_OPTIMIZATION_GUIDE.md](GPU_OPTIMIZATION_GUIDE.md)** - Detailed GPU optimization guide
+- **[OPTIMIZATIONS.md](OPTIMIZATIONS.md)** - Performance improvements explained
+- **[CHANGELOG.md](CHANGELOG.md)** - Version history and updates
+
+## 🤝 Contributing
+
+Contributions are welcome! Feel free to open issues or submit pull requests.
+
+## 📄 License
+
+See LICENSE file for details.
