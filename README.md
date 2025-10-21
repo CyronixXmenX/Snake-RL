@@ -4,7 +4,7 @@ Train a Deep Q-Network (DQN) to play Snake on a grid world that mirrors the Pyga
 
 > **⚡ NEW: GPU Optimization!** Standard training was using only **1.5% of GPU**. The new optimized training achieves **70-90% GPU utilization** for **8x faster training**! See [Quick Start](#-maximum-gpu-utilization-new) below.
 
-📚 **[Quick Start Guide](QUICKSTART.md)** | 🚀 **[Optimizations](OPTIMIZATIONS.md)** | 🎮 **[GPU Guide](GPU_OPTIMIZATION_GUIDE.md)** | ⚡ **[GPU Utilization](GPU_UTILIZATION_IMPROVEMENTS.md)** | 📝 **[Changelog](CHANGELOG.md)**
+🚀 **[Optimizations](OPTIMIZATIONS.md)** | 🎮 **[GPU Guide](GPU_OPTIMIZATION_GUIDE.md)** | 📝 **[Changelog](CHANGELOG.md)**
 
 ---
 
@@ -112,7 +112,7 @@ python train_dqn.py --config config.yaml --total_steps 100000 --lr 0.0002
   - Multiple training steps per environment step (NEW!)
   - 70-90% GPU utilization vs 1.5% with standard training (NEW!)
   - See [GPU Optimization Guide](GPU_OPTIMIZATION_GUIDE.md) for details
-  - See [GPU Utilization Improvements](GPU_UTILIZATION_IMPROVEMENTS.md) for maximum performance
+  - See [GPU Optimization Guide](GPU_OPTIMIZATION_GUIDE.md) for maximum performance and vectorized environment details
 - Code Quality:
   - Comprehensive docstrings for all classes and methods
   - Full type hints throughout the codebase
@@ -245,8 +245,7 @@ python train_dqn_optimized.py --config config_gpu_optimized.yaml
 - Multiple training steps per environment step (keeps GPU busy)
 - Expected speedup: **8x faster** than standard GPU training, **50x faster** than CPU
 
-📖 **Quick Start**: [QUICKSTART_GPU_OPTIMIZATION.md](QUICKSTART_GPU_OPTIMIZATION.md)  
-📚 **Full Guide**: [GPU_UTILIZATION_IMPROVEMENTS.md](GPU_UTILIZATION_IMPROVEMENTS.md)
+📖 **See Full Details**: [GPU_OPTIMIZATION_GUIDE.md](GPU_OPTIMIZATION_GUIDE.md)
 
 ### Ready-to-Use GPU Commands
 
@@ -362,9 +361,8 @@ pip install -r requirements.txt --upgrade
 
 ## 📚 Additional Resources
 
-- **[QUICKSTART.md](QUICKSTART.md)** - Get started in under 5 minutes
-- **[GPU_OPTIMIZATION_GUIDE.md](GPU_OPTIMIZATION_GUIDE.md)** - Detailed GPU optimization guide
-- **[OPTIMIZATIONS.md](OPTIMIZATIONS.md)** - Performance improvements explained
+- **[GPU_OPTIMIZATION_GUIDE.md](GPU_OPTIMIZATION_GUIDE.md)** - Complete GPU optimization guide with vectorized environments and maximum utilization
+- **[OPTIMIZATIONS.md](OPTIMIZATIONS.md)** - Performance improvements and implementation details
 - **[CHANGELOG.md](CHANGELOG.md)** - Version history and updates
 
 ## 🤝 Contributing
