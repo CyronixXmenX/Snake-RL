@@ -1,6 +1,14 @@
+"""
+Snake Game with Pygame - Manual Play Version.
+
+A classic Snake game implementation with modern visuals, configurable speed,
+and high score tracking.
+"""
+
 import sys
 import random
 from pathlib import Path
+from typing import Tuple, List, Optional, Set
 
 import pygame
 
@@ -17,7 +25,7 @@ BASE_MOVE_DELAY_MS = 150   # Starting delay between moves in ms
 MIN_MOVE_DELAY_MS = 60     # Minimum delay (cap)
 SPEEDUP_PER_FOOD_MS = 3    # Speed up per food eaten
 
-# Colors
+# Colors (RGB)
 COLOR_BG = (22, 24, 29)         # Background
 COLOR_GRID = (36, 39, 46)       # Grid lines
 COLOR_SNAKE = (0, 200, 140)     # Snake body
@@ -35,37 +43,75 @@ FONT_LARGE_SIZE = 38
 HIGHSCORE_FILE = Path("highscore.txt")
 
 # =========================
-# GAME OBJECTS
+# TYPE DEFINITIONS
 # =========================
-Vec2 = tuple[int, int]
+Vec2 = Tuple[int, int]
 
 
+# =========================
+# HELPER FUNCTIONS
+# =========================
 def add_vec(a: Vec2, b: Vec2) -> Vec2:
+    """Add two 2D vectors."""
     return a[0] + b[0], a[1] + b[1]
 
 
 def opposite(a: Vec2, b: Vec2) -> bool:
+    """Check if two direction vectors are opposite."""
     return a[0] == -b[0] and a[1] == -b[1]
 
 
+# =========================
+# GAME OBJECTS
+# =========================
 class Snake:
-    def __init__(self, start: Vec2, length: int = 3):
-        self.body: list[Vec2] = [(start[0] - i, start[1]) for i in range(length)]
+    """
+    Snake entity with movement and collision logic.
+    
+    Attributes:
+        body: List of positions from head to tail
+        direction: Current movement direction
+        grow_pending: Number of segments to grow
+    """
+    
+    def __init__(self, start: Vec2, length: int = 3) -> None:
+        """
+        Initialize snake at starting position.
+        
+        Args:
+            start: Initial head position
+            length: Initial body length
+        """
+        self.body: List[Vec2] = [(start[0] - i, start[1]) for i in range(length)]
         self.direction: Vec2 = (1, 0)  # moving right
         self.grow_pending: int = 0
 
     @property
     def head(self) -> Vec2:
+        """Get the head position."""
         return self.body[0]
 
-    def set_direction(self, new_dir: Vec2):
+    def set_direction(self, new_dir: Vec2) -> None:
+        """
+        Set new movement direction.
+        
+        Prevents reversing directly into itself (180-degree turns).
+        
+        Args:
+            new_dir: New direction vector
+        """
         # Prevent reversing directly into itself
         if len(self.body) > 1 and opposite(self.direction, new_dir):
             return
         self.direction = new_dir
 
     def step(self) -> Vec2:
-        """Advance snake by one cell. Returns new head position."""
+        """
+        Advance snake by one cell.
+        
+        Returns:
+            New head position
+        """
         new_head = add_vec(self.head, self.direction)
         self.body.insert(0, new_head)
         if self.grow_pending > 0:
@@ -74,23 +120,41 @@ class Snake:
             self.body.pop()
         return new_head
 
-    def grow(self, amount: int = 1):
+    def grow(self, amount: int = 1) -> None:
+        """Schedule growth for next moves."""
         self.grow_pending += amount
 
     def collides_with_self(self) -> bool:
+        """Check if head collides with body."""
         return self.head in self.body[1:]
 
     def occupies(self, pos: Vec2) -> bool:
+        """Check if position is occupied by snake."""
         return pos in self.body
 
 
 class Food:
-    def __init__(self, grid_w: int, grid_h: int):
+    """
+    Food entity with respawning logic.
+    
+    Attributes:
+        grid_w: Grid width
+        grid_h: Grid height
+        pos: Current food position (None if not spawned)
+    """
+    
+    def __init__(self, grid_w: int, grid_h: int) -> None:
         self.grid_w = grid_w
         self.grid_h = grid_h
-        self.pos: Vec2 | None = None
+        self.pos: Optional[Vec2] = None
 
-    def respawn(self, forbidden: set[Vec2]):
+    def respawn(self, forbidden: Set[Vec2]) -> None:
+        """
+        Respawn food at random empty location.
+        
+        Args:
+            forbidden: Set of positions to avoid (e.g., snake body)
+        """
         while True:
             p = (random.randint(0, self.grid_w - 1), random.randint(0, self.grid_h - 1))
             if p not in forbidden:
@@ -99,24 +163,37 @@ class Food:
 
 
 class HighScore:
-    def __init__(self, file_path: Path):
+    """
+    Persistent high score tracking.
+    
+    Loads/saves high score from/to file.
+    """
+    
+    def __init__(self, file_path: Path) -> None:
         self.file = file_path
         self.value = 0
         self._load()
 
-    def _load(self):
+    def _load(self) -> None:
+        """Load high score from file."""
         try:
             if self.file.exists():
                 self.value = int(self.file.read_text().strip() or "0")
-        except Exception:
+        except (ValueError, IOError):
             self.value = 0
 
-    def try_set(self, score: int):
+    def try_set(self, score: int) -> None:
+        """
+        Update high score if new score is higher.
+        
+        Args:
+            score: New score to compare
+        """
         if score > self.value:
             self.value = score
             try:
                 self.file.write_text(str(self.value))
-            except Exception:
+            except IOError:
                 pass
 
 
@@ -124,7 +201,15 @@ class HighScore:
 # GAME
 # =========================
 class Game:
-    def __init__(self):
+    """
+    Main game class handling initialization, game loop, and rendering.
+    
+    Controls the entire game flow including input handling, state updates,
+    and rendering.
+    """
+    
+    def __init__(self) -> None:
+        """Initialize pygame and game components."""
         pygame.init()
         pygame.display.set_caption("Snake")
         self.screen_w = CELL_SIZE * GRID_WIDTH
@@ -138,7 +223,8 @@ class Game:
         self.reset()
         self.highscore = HighScore(HIGHSCORE_FILE)
 
-    def reset(self):
+    def reset(self) -> None:
+        """Reset game to initial state."""
         start = (GRID_WIDTH // 2, GRID_HEIGHT // 2)
         self.snake = Snake(start, length=4)
         self.food = Food(GRID_WIDTH, GRID_HEIGHT)
@@ -149,7 +235,8 @@ class Game:
         self.move_delay_ms = BASE_MOVE_DELAY_MS
         self.last_move_ms = pygame.time.get_ticks()
 
-    def handle_input(self):
+    def handle_input(self) -> None:
+        """Process keyboard and window events."""
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.quit_game()
@@ -176,7 +263,8 @@ class Game:
                 elif event.key in (pygame.K_RIGHT, pygame.K_d):
                     self.snake.set_direction((1, 0))
 
-    def update(self):
+    def update(self) -> None:
+        """Update game state (snake movement, collisions, etc.)."""
         if self.paused or self.game_over:
             return
 
@@ -206,12 +294,13 @@ class Game:
             # Respawn food not on snake
             self.food.respawn(forbidden=set(self.snake.body))
 
-    def trigger_game_over(self):
+    def trigger_game_over(self) -> None:
+        """Handle game over event."""
         self.game_over = True
         self.highscore.try_set(self.score)
 
-    def draw_grid(self):
-        # Subtle grid lines
+    def draw_grid(self) -> None:
+        """Draw subtle grid lines."""
         for x in range(GRID_WIDTH + 1):
             px = x * CELL_SIZE
             pygame.draw.line(self.screen, COLOR_GRID, (px, 0), (px, self.screen_h), 1)
@@ -219,7 +308,8 @@ class Game:
             py = y * CELL_SIZE
             pygame.draw.line(self.screen, COLOR_GRID, (0, py), (self.screen_w, py), 1)
 
-    def draw_snake(self):
+    def draw_snake(self) -> None:
+        """Draw snake with head and body segments."""
         # Draw body
         for i, (x, y) in enumerate(self.snake.body):
             rect = pygame.Rect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE)
@@ -237,7 +327,8 @@ class Game:
             else:
                 pygame.draw.rect(self.screen, COLOR_SNAKE, rect)
 
-    def draw_food(self):
+    def draw_food(self) -> None:
+        """Draw food as a circle with leaf decoration."""
         if not self.food.pos:
             return
         x, y = self.food.pos
@@ -250,7 +341,8 @@ class Game:
         leaf_pos = (center[0] - radius // 2, center[1] - radius - 2)
         pygame.draw.circle(self.screen, (60, 190, 90), leaf_pos, max(2, radius // 4))
 
-    def draw_hud(self):
+    def draw_hud(self) -> None:
+        """Draw heads-up display (score, high score, messages)."""
         # Score and High Score
         score_surf = self.font_main.render(f"Score: {self.score}", True, COLOR_TEXT)
         hs_surf = self.font_main.render(f"High: {self.highscore.value}", True, COLOR_TEXT_DIM)
@@ -267,7 +359,8 @@ class Game:
             self.screen.blit(title, title.get_rect(center=(self.screen_w // 2, self.screen_h // 2 - 20)))
             self.screen.blit(tip, tip.get_rect(center=(self.screen_w // 2, self.screen_h // 2 + 20)))
 
-    def draw(self):
+    def draw(self) -> None:
+        """Render the entire game state."""
         self.screen.fill(COLOR_BG)
         self.draw_grid()
         self.draw_food()
@@ -275,11 +368,13 @@ class Game:
         self.draw_hud()
         pygame.display.flip()
 
-    def quit_game(self):
+    def quit_game(self) -> None:
+        """Clean up and exit."""
         pygame.quit()
         sys.exit(0)
 
-    def run(self):
+    def run(self) -> None:
+        """Main game loop."""
         while True:
             self.handle_input()
             self.update()
