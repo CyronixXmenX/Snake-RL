@@ -79,8 +79,8 @@ def main() -> None:
                         help="Disable console logging")
     parser.add_argument("--num_envs", type=int, default=8,
                         help="Number of parallel environments (default: 8)")
-    parser.add_argument("--train_freq", type=int, default=4,
-                        help="Number of training steps per environment step (default: 4)")
+    parser.add_argument("--train_freq", type=int, default=1,
+                        help="Number of training steps per environment step (default: 1)")
     args = parser.parse_args()
     
     # Load config file if provided

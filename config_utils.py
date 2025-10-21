@@ -138,7 +138,7 @@ def add_training_arguments(parser: argparse.ArgumentParser) -> None:
     # GPU optimization arguments
     parser.add_argument("--use_amp", action="store_true", 
                         help="Use automatic mixed precision (AMP) for faster GPU training")
-    parser.add_argument("--pin_memory", action="store_true", default=True,
-                        help="Pin memory for faster data transfer to GPU (enabled by default)")
+    parser.add_argument("--pin_memory", action="store_true", default=False,
+                        help="Pin memory for faster data transfer to GPU (may add overhead for small batches)")
     parser.add_argument("--gradient_accumulation_steps", type=int, default=1,
                         help="Number of gradient accumulation steps (effective batch size = batch_size * gradient_accumulation_steps)")
