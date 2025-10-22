@@ -101,6 +101,9 @@ def main() -> None:
             "food_reward": args.food_reward,
             "death_reward": args.death_reward,
             "distance_reward_scale": args.distance_reward_scale,
+            "loop_penalty": args.loop_penalty,
+            "exploration_reward_scale": args.exploration_reward_scale,
+            "loop_detection_window": args.loop_detection_window,
         },
         "DQN": {
             "learning_rate": args.lr,
@@ -136,6 +139,9 @@ def main() -> None:
         food_reward=args.food_reward,
         death_reward=args.death_reward,
         distance_reward_scale=args.distance_reward_scale,
+        loop_penalty=args.loop_penalty,
+        exploration_reward_scale=args.exploration_reward_scale,
+        loop_detection_window=args.loop_detection_window,
         render_mode="none",
     )
     env.reset(seed=args.seed)

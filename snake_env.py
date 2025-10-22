@@ -7,6 +7,7 @@ designed for training Deep Q-Networks and other RL algorithms.
 
 from __future__ import annotations
 
+from collections import deque
 from typing import Optional, Tuple, List, Dict, Any
 
 import numpy as np
@@ -38,6 +39,8 @@ class SnakeEnv(gym.Env):
     - Discrete actions: 0=Up, 1=Down, 2=Left, 3=Right
     - Reverse-direction input is ignored (like the Pygame game)
     - Rewards: configurable for eating food, dying, and time penalty
+    - Loop detection: penalizes circular movement patterns
+    - Exploration rewards: encourages visiting new cells via heatmap tracking
     
     Args:
         grid_w: Width of the game grid in cells
@@ -48,6 +51,10 @@ class SnakeEnv(gym.Env):
         max_steps_multiplier: Maximum episode steps as multiple of grid size
         render_mode: Either "human" for pygame rendering or "none"
         cell_size: Pixel size of each cell for rendering
+        distance_reward_scale: Scale for distance-based reward shaping (0 to disable)
+        loop_penalty: Penalty for revisiting recent positions (negative value)
+        exploration_reward_scale: Scale for heatmap-based exploration rewards (0 to disable)
+        loop_detection_window: Number of recent positions to track for loop detection
     """
     
     metadata = {"render_modes": ["human", "none"], "render_fps": 12}
@@ -66,6 +73,9 @@ class SnakeEnv(gym.Env):
         render_mode: str = "none",
         cell_size: int = 24,
         distance_reward_scale: float = 0.1,
+        loop_penalty: float = -0.05,
+        exploration_reward_scale: float = 0.02,
+        loop_detection_window: int = 8,
     ) -> None:
         super().__init__()
         
@@ -81,6 +91,9 @@ class SnakeEnv(gym.Env):
         self.render_mode = render_mode
         self.cell_size = int(cell_size)
         self.distance_reward_scale = float(distance_reward_scale)
+        self.loop_penalty = float(loop_penalty)
+        self.exploration_reward_scale = float(exploration_reward_scale)
+        self.loop_detection_window = int(loop_detection_window)
 
         # Observation: 3xH x W uint8 in [0, 255] -> normalized to [0,1] by agent
         self.observation_space = spaces.Box(
@@ -98,6 +111,10 @@ class SnakeEnv(gym.Env):
         self._rng = np.random.RandomState()  # set in reset by gymnasium seeding
         self._snake_set: set[Pos] = set()  # Cache for O(1) collision checks
         self._prev_distance_to_food: Optional[float] = None  # Track distance for reward shaping
+        
+        # Heatmap and loop detection
+        self._position_heatmap: np.ndarray = np.zeros((self.grid_h, self.grid_w), dtype=np.int32)
+        self._recent_positions: deque = deque(maxlen=self.loop_detection_window)
 
         # Render members
         self._screen = None
@@ -128,6 +145,47 @@ class SnakeEnv(gym.Env):
     def _manhattan_distance(self, pos1: Pos, pos2: Pos) -> float:
         """Calculate Manhattan distance between two positions."""
         return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
+    
+    def _detect_loop(self, new_head: Pos) -> bool:
+        """
+        Detect if the snake is moving in a loop pattern.
+        
+        Returns True if the new head position was recently visited
+        (within the loop detection window).
+        
+        Args:
+            new_head: The new head position to check
+            
+        Returns:
+            True if loop detected, False otherwise
+        """
+        return new_head in self._recent_positions
+    
+    def _get_heatmap_reward(self, pos: Pos) -> float:
+        """
+        Calculate exploration reward based on position heatmap.
+        
+        Rewards visiting less-visited cells to encourage exploration.
+        
+        Args:
+            pos: Position to evaluate
+            
+        Returns:
+            Reward value (positive for unvisited/rarely visited cells)
+        """
+        x, y = pos
+        if not (0 <= x < self.grid_w and 0 <= y < self.grid_h):
+            return 0.0
+        
+        # Higher reward for less-visited cells
+        visit_count = self._position_heatmap[y, x]
+        
+        # Exponential decay: first visit gets full reward, subsequent visits get less
+        if visit_count == 0:
+            return 1.0  # Full exploration reward for new cells
+        else:
+            # Decay factor: reward decreases as visit count increases
+            return max(0.0, 1.0 - (visit_count * 0.2))
     
     def _reset_snake(self) -> None:
         """Initialize the snake at the center of the grid."""
@@ -188,6 +246,15 @@ class SnakeEnv(gym.Env):
         else:
             self._prev_distance_to_food = None
         
+        # Reset heatmap and loop detection
+        self._position_heatmap.fill(0)
+        self._recent_positions.clear()
+        # Mark initial snake positions in heatmap
+        for pos in self.snake:
+            x, y = pos
+            if 0 <= x < self.grid_w and 0 <= y < self.grid_h:
+                self._position_heatmap[y, x] += 1
+        
         obs = self._get_obs()
         info: Dict[str, Any] = {}
         if self.render_mode == "human":
@@ -236,9 +303,25 @@ class SnakeEnv(gym.Env):
                 reward += self.death_reward
                 terminated = True
             else:
+                # Check for loop before proceeding
+                is_loop = self._detect_loop(new_head) if self.loop_penalty < 0 else False
+                
                 # Proceed move
                 self.snake.insert(0, new_head)
                 self._snake_set.add(new_head)
+                
+                # Add loop penalty if detected
+                if is_loop:
+                    reward += self.loop_penalty
+                
+                # Add heatmap-based exploration reward
+                if self.exploration_reward_scale > 0:
+                    heatmap_reward = self._get_heatmap_reward(new_head)
+                    reward += heatmap_reward * self.exploration_reward_scale
+                
+                # Update heatmap and recent positions
+                self._position_heatmap[ny, nx] += 1
+                self._recent_positions.append(new_head)
                 
                 # Calculate distance-based reward shaping BEFORE eating
                 if self.food is not None and self.distance_reward_scale > 0:
