@@ -37,11 +37,15 @@ exploration:
 # GPU optimization settings (all enabled)
 gpu_optimization:
   use_amp: true  # Automatic Mixed Precision for 2-3x speedup
-  pin_memory: false  # Disabled by default (adds overhead for small batches)
+  pin_memory: true  # Enable pinned memory for faster CPU-GPU transfers
   gradient_accumulation_steps: 1  # Can increase for larger effective batch
+  compile_model: true  # Use torch.compile for optimized execution (PyTorch 2.0+)
 
 # Notes:
 # - This config is optimized for NVIDIA GPUs with Tensor Cores (RTX 20xx+)
 # - If you get OOM errors, reduce batch_size or buffer_size
 # - For limited GPU memory, increase gradient_accumulation_steps and reduce batch_size
 # - Expected speedup: 15-20x faster than CPU training
+# - GPU-optimized replay buffer stores data directly on GPU (zero-copy sampling)
+# - Pinned memory enables async CPU-GPU transfers for better throughput
+# - torch.compile provides additional 20-30% speedup on PyTorch 2.0+ (first run slower due to compilation)

@@ -124,6 +124,7 @@ def main() -> None:
             "use_amp": args.use_amp,
             "pin_memory": args.pin_memory,
             "gradient_accumulation_steps": args.gradient_accumulation_steps,
+            "compile_model": args.compile_model,
         }
     })
 
@@ -153,6 +154,7 @@ def main() -> None:
         use_amp=args.use_amp,
         pin_memory=args.pin_memory,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
+        compile_model=args.compile_model,
     )
     agent = DQNAgent(cfg)
     train_logger.log_training_start(args.total_steps, str(agent.device))

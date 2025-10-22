@@ -36,6 +36,7 @@ class DQNConfig:
     use_amp: bool = False  # Automatic Mixed Precision for faster GPU training
     pin_memory: bool = False  # Pin memory for faster data transfer to GPU (may add overhead)
     gradient_accumulation_steps: int = 1  # Gradient accumulation for larger effective batch sizes
+    compile_model: bool = False  # Use torch.compile for optimized execution (PyTorch 2.0+)
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert config to dictionary."""
@@ -102,20 +103,47 @@ class ReplayBuffer:
     Args:
         capacity: Maximum number of transitions to store
         obs_shape: Shape of observations (C, H, W)
+        device: Device for storing tensors ('cpu' or 'cuda')
+        pin_memory: Whether to pin memory for faster GPU transfer
     """
     
-    def __init__(self, capacity: int, obs_shape: Tuple[int, int, int]) -> None:
+    def __init__(
+        self, 
+        capacity: int, 
+        obs_shape: Tuple[int, int, int],
+        device: Optional[torch.device] = None,
+        pin_memory: bool = False
+    ) -> None:
         self.capacity = capacity
         self.obs_shape = obs_shape  # (C, H, W)
         self.ptr = 0
         self.size = 0
+        self.device = device or torch.device("cpu")
+        self.use_gpu = self.device.type == "cuda"
+        # Only pin memory if CUDA is available and we're on CPU
+        self.pin_memory = pin_memory and not self.use_gpu and torch.cuda.is_available()
 
-        # Store observations as uint8 to save memory
-        self.obs = np.zeros((capacity,) + obs_shape, dtype=np.uint8)
-        self.next_obs = np.zeros((capacity,) + obs_shape, dtype=np.uint8)
-        self.actions = np.zeros((capacity,), dtype=np.int64)
-        self.rewards = np.zeros((capacity,), dtype=np.float32)
-        self.dones = np.zeros((capacity,), dtype=np.bool_)
+        if self.use_gpu:
+            # Store data directly on GPU for zero-copy sampling
+            self.obs = torch.zeros((capacity,) + obs_shape, dtype=torch.uint8, device=self.device)
+            self.next_obs = torch.zeros((capacity,) + obs_shape, dtype=torch.uint8, device=self.device)
+            self.actions = torch.zeros((capacity,), dtype=torch.int64, device=self.device)
+            self.rewards = torch.zeros((capacity,), dtype=torch.float32, device=self.device)
+            self.dones = torch.zeros((capacity,), dtype=torch.bool, device=self.device)
+        else:
+            # Store on CPU (with optional pinning for faster transfer)
+            if self.pin_memory:
+                self.obs = torch.zeros((capacity,) + obs_shape, dtype=torch.uint8).pin_memory()
+                self.next_obs = torch.zeros((capacity,) + obs_shape, dtype=torch.uint8).pin_memory()
+                self.actions = torch.zeros((capacity,), dtype=torch.int64).pin_memory()
+                self.rewards = torch.zeros((capacity,), dtype=torch.float32).pin_memory()
+                self.dones = torch.zeros((capacity,), dtype=torch.bool).pin_memory()
+            else:
+                self.obs = torch.zeros((capacity,) + obs_shape, dtype=torch.uint8)
+                self.next_obs = torch.zeros((capacity,) + obs_shape, dtype=torch.uint8)
+                self.actions = torch.zeros((capacity,), dtype=torch.int64)
+                self.rewards = torch.zeros((capacity,), dtype=torch.float32)
+                self.dones = torch.zeros((capacity,), dtype=torch.bool)
 
     def push(
         self, 
@@ -135,25 +163,39 @@ class ReplayBuffer:
             next_obs: Next observation
             done: Whether episode terminated
         """
-        self.obs[self.ptr] = obs
+        # Convert numpy arrays to tensors directly on target device
+        if self.use_gpu:
+            self.obs[self.ptr].copy_(torch.from_numpy(obs))
+            self.next_obs[self.ptr].copy_(torch.from_numpy(next_obs))
+        else:
+            self.obs[self.ptr] = torch.from_numpy(obs)
+            self.next_obs[self.ptr] = torch.from_numpy(next_obs)
+        
         self.actions[self.ptr] = action
         self.rewards[self.ptr] = reward
-        self.next_obs[self.ptr] = next_obs
         self.dones[self.ptr] = done
         self.ptr = (self.ptr + 1) % self.capacity
         self.size = min(self.size + 1, self.capacity)
 
-    def sample(self, batch_size: int) -> Dict[str, np.ndarray]:
+    def sample(self, batch_size: int) -> Dict[str, torch.Tensor]:
         """
         Sample a batch of transitions uniformly.
+        
+        Returns tensors on the same device as the buffer.
         
         Args:
             batch_size: Number of transitions to sample
             
         Returns:
-            Dictionary with keys: obs, actions, rewards, next_obs, dones
+            Dictionary with keys: obs, actions, rewards, next_obs, dones (all torch.Tensor)
         """
-        idx = np.random.randint(0, self.size, size=batch_size)
+        # Generate random indices on the same device for GPU efficiency
+        if self.use_gpu:
+            idx = torch.randint(0, self.size, (batch_size,), device=self.device)
+        else:
+            idx = torch.randint(0, self.size, (batch_size,))
+        
+        # Index directly into tensors - zero copy on GPU, minimal overhead on CPU
         batch = {
             "obs": self.obs[idx],
             "actions": self.actions[idx],
@@ -194,10 +236,26 @@ class DQNAgent:
         self.target_q.load_state_dict(self.q.state_dict())
         self.target_q.eval()
 
+        # Compile models for optimized execution (PyTorch 2.0+)
+        if cfg.compile_model and hasattr(torch, 'compile'):
+            try:
+                self.q = torch.compile(self.q, mode="reduce-overhead")
+                self.target_q = torch.compile(self.target_q, mode="reduce-overhead")
+            except Exception as e:
+                # Compilation may fail on some systems, fall back to eager mode
+                pass
+
         self.optim = optim.Adam(self.q.parameters(), lr=cfg.lr)
         self.gamma = cfg.gamma
 
-        self.replay = ReplayBuffer(cfg.buffer_size, (cfg.in_channels, cfg.grid_h, cfg.grid_w))
+        # Initialize GPU-optimized replay buffer
+        buffer_device = self.device if self.device.type == "cuda" else torch.device("cpu")
+        self.replay = ReplayBuffer(
+            cfg.buffer_size, 
+            (cfg.in_channels, cfg.grid_h, cfg.grid_w),
+            device=buffer_device,
+            pin_memory=cfg.pin_memory
+        )
         self.batch_size = cfg.batch_size
         self.train_start = cfg.train_start
         self.target_update = cfg.target_update
@@ -205,14 +263,27 @@ class DQNAgent:
         self.train_steps = 0
         
         # GPU optimizations
-        self.use_amp = cfg.use_amp and self.device.type == "cuda"
-        self.scaler = torch.amp.GradScaler(enabled=self.use_amp) if self.use_amp else None
-        self.pin_memory = cfg.pin_memory and self.device.type == "cuda"
+        self.use_gpu = self.device.type == "cuda"
+        self.use_amp = cfg.use_amp and self.use_gpu
+        self.scaler = torch.amp.GradScaler("cuda", enabled=self.use_amp) if self.use_amp else None
+        self.pin_memory = cfg.pin_memory and self.use_gpu
         self.gradient_accumulation_steps = cfg.gradient_accumulation_steps
         self._accumulated_steps = 0
         
+        # CUDA stream for async operations (only on GPU)
+        self.stream = torch.cuda.Stream() if self.use_gpu else None
+        
         # Loss function (reused for efficiency)
         self.loss_fn = nn.SmoothL1Loss()
+        
+        # Enable TF32 for faster training on Ampere+ GPUs
+        if self.use_gpu and torch.cuda.get_device_capability()[0] >= 8:
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
+        
+        # Enable cuDNN benchmarking for faster convolutions
+        if self.use_gpu:
+            torch.backends.cudnn.benchmark = True
     
     def _get_device(self, device_cfg: str) -> torch.device:
         """Determine compute device based on configuration."""
@@ -237,8 +308,12 @@ class DQNAgent:
         """
         if np.random.rand() < epsilon:
             return np.random.randint(0, self.cfg.num_actions)
-        # obs: (C,H,W) uint8 -> float32 [0,1]
-        obs_t = torch.from_numpy(obs).float().div(255.0).unsqueeze(0).to(self.device)
+        
+        # Convert to tensor and normalize efficiently
+        # Use contiguous() for better memory access patterns
+        obs_t = torch.from_numpy(obs).float().div_(255.0).unsqueeze(0).contiguous()
+        obs_t = obs_t.to(self.device, non_blocking=True)
+        
         q_values = self.q(obs_t)
         action = int(q_values.argmax(dim=1).item())
         return action
@@ -261,14 +336,24 @@ class DQNAgent:
         if self.replay.size < self.train_start:
             return None
 
+        # Sample batch - already on correct device (GPU or CPU)
         batch = self.replay.sample(self.batch_size)
         
-        # Convert to tensors and transfer to device
-        obs = torch.from_numpy(batch["obs"]).float().div(255.0).to(self.device)
-        next_obs = torch.from_numpy(batch["next_obs"]).float().div(255.0).to(self.device)
-        actions = torch.from_numpy(batch["actions"]).long().to(self.device)
-        rewards = torch.from_numpy(batch["rewards"]).float().to(self.device)
-        dones = torch.from_numpy(batch["dones"]).float().to(self.device)
+        # Convert uint8 observations to float32 [0, 1] - keep on same device
+        # Use contiguous() to ensure efficient memory layout
+        obs = batch["obs"].float().div_(255.0).contiguous()
+        next_obs = batch["next_obs"].float().div_(255.0).contiguous()
+        actions = batch["actions"]
+        rewards = batch["rewards"]
+        dones = batch["dones"].float()
+        
+        # If buffer is on CPU but model is on GPU, transfer now (async if pinned)
+        if not self.use_gpu or self.replay.device.type == "cpu":
+            obs = obs.to(self.device, non_blocking=self.pin_memory)
+            next_obs = next_obs.to(self.device, non_blocking=self.pin_memory)
+            actions = actions.to(self.device, non_blocking=self.pin_memory)
+            rewards = rewards.to(self.device, non_blocking=self.pin_memory)
+            dones = dones.to(self.device, non_blocking=self.pin_memory)
 
         # Forward pass with optional automatic mixed precision
         with torch.amp.autocast(device_type=self.device.type, enabled=self.use_amp):

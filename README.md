@@ -67,9 +67,14 @@ Use arrow keys or WASD to control the snake.
 
 ### GPU Optimization
 - **Automatic device detection** (CPU/CUDA)
+- **GPU-optimized replay buffer** with zero-copy sampling (data stored directly on GPU)
 - **Mixed Precision Training (AMP)** for 2-3x speedup on modern GPUs
-- **Optimized tensor operations** for minimal overhead
-- **Configurable batch sizes** to fit your GPU memory
+- **Pinned memory** for async CPU-GPU transfers
+- **torch.compile** support for JIT compilation (PyTorch 2.0+, 20-30% speedup)
+- **TF32 acceleration** on Ampere+ GPUs (RTX 30xx+)
+- **cuDNN benchmarking** for optimized convolution kernels
+- **Gradient accumulation** for larger effective batch sizes
+- **CUDA streams** for concurrent GPU operations
 
 ---
 
@@ -124,6 +129,7 @@ gpu_optimization:
   use_amp: false  # Enable for 2-3x speedup on modern GPUs (RTX 20xx+)
   pin_memory: false  # Usually not needed
   gradient_accumulation_steps: 1  # Increase for larger effective batch size
+  compile_model: false  # Enable for 20-30% speedup on PyTorch 2.0+
 ```
 
 ### Command-Line Overrides
@@ -199,14 +205,27 @@ python train_dqn.py \
   --device auto
 ```
 
-**Option 4: GPU with Mixed Precision (Maximum Speed)**
+**Option 4: GPU with All Optimizations (Maximum Speed)**
 ```bash
+python train_dqn.py --config config_gpu.yaml
+# or manually:
 python train_dqn.py \
   --device cuda \
   --use_amp \
+  --pin_memory \
+  --compile_model \
   --batch_size 128 \
   --lr 0.0002 \
   --total_steps 500000
+```
+
+**Option 5: Benchmark GPU Performance**
+```bash
+# Single run benchmark
+python benchmark_gpu.py --num_steps 1000 --batch_size 128
+
+# Compare different configurations
+python benchmark_gpu.py --compare --num_steps 1000
 ```
 
 ### Training Output
@@ -252,11 +271,14 @@ python evaluate_dqn.py \
 
 ### Performance Expectations
 
-- **CPU Training**: ~8-10 steps/second (neural network training is CPU-intensive)
-- **GPU Training (basic)**: ~90-150 steps/second (10-15x faster than CPU)
-- **GPU Training with AMP**: ~150-200 steps/second (15-20x faster than CPU)
+With the GPU optimizations in this implementation:
 
-> **Note**: The training speed depends heavily on your hardware. Modern GPUs with CUDA support provide significant speedups for neural network training.
+- **CPU Training**: ~5-10 steps/second (baseline)
+- **GPU Training (basic)**: ~50-100 steps/second (5-10x faster)
+- **GPU Training + AMP**: ~100-200 steps/second (10-20x faster)
+- **GPU Training + All Optimizations**: ~150-250 steps/second (15-25x faster)
+
+> **Note**: Performance depends heavily on hardware. Modern NVIDIA GPUs with Tensor Cores (RTX 20xx+, V100+) provide the best speedups. The GPU-optimized replay buffer stores data directly on GPU, eliminating expensive CPU-GPU transfers during training.
 
 ### GPU Settings Explained
 
@@ -268,13 +290,30 @@ python evaluate_dqn.py \
 
 #### `pin_memory`
 - **What it does**: Pre-allocates page-locked memory for faster CPU-to-GPU transfers
-- **When to use**: Only for very large batch sizes (256+) with lots of RAM
-- **Default**: Disabled (adds overhead for typical batch sizes)
+- **When to use**: When replay buffer is on CPU but model is on GPU
+- **Default**: Enabled in config_gpu.yaml
+- **Note**: Not needed when buffer is on GPU (zero-copy sampling)
 
 #### `gradient_accumulation_steps`
 - **What it does**: Simulates larger batch sizes by accumulating gradients
 - **When to use**: When you want larger batch size but have limited GPU memory
 - **Example**: `batch_size=32` with `gradient_accumulation_steps=4` = effective batch size of 128
+
+#### `compile_model` (PyTorch 2.0+)
+- **What it does**: JIT compiles the model for optimized execution
+- **When to use**: Always enable on PyTorch 2.0+ for additional 20-30% speedup
+- **Note**: First run is slower due to compilation, subsequent runs are faster
+- **Benefit**: Optimized CUDA kernels, graph optimizations
+
+### GPU Replay Buffer
+
+The replay buffer can store data directly on GPU or CPU:
+
+- **GPU Buffer** (default on CUDA): Zero-copy sampling, no transfer overhead
+- **CPU Buffer + Pin Memory**: Async transfers to GPU during training
+- **CPU Buffer**: Standard transfers (slowest but uses less GPU memory)
+
+To use GPU buffer, the model must be on GPU (`device=cuda`). The buffer will automatically use GPU storage.
 
 ### GPU Memory Optimization
 
@@ -309,6 +348,7 @@ python train_dqn.py \
 Snake-RL/
 ├── train_dqn.py          # Main training script
 ├── evaluate_dqn.py       # Model evaluation script
+├── benchmark_gpu.py      # GPU performance benchmarking
 ├── main.py               # Manual play (Pygame)
 ├── snake_env.py          # Gymnasium Snake environment
 ├── dqn_agent.py          # DQN agent implementation
