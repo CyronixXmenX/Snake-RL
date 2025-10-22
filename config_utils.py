@@ -67,6 +67,7 @@ def merge_config_with_args(config: Dict[str, Any], args: argparse.Namespace) -> 
         ('environment', 'step_penalty'): 'step_penalty',
         ('environment', 'food_reward'): 'food_reward',
         ('environment', 'death_reward'): 'death_reward',
+        ('environment', 'distance_reward_scale'): 'distance_reward_scale',
         ('dqn', 'learning_rate'): 'lr',
         ('dqn', 'gamma'): 'gamma',
         ('dqn', 'batch_size'): 'batch_size',
@@ -126,6 +127,8 @@ def add_training_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--step_penalty", type=float, default=-0.01, help="Penalty for each step")
     parser.add_argument("--food_reward", type=float, default=1.0, help="Reward for eating food")
     parser.add_argument("--death_reward", type=float, default=-1.0, help="Penalty for dying")
+    parser.add_argument("--distance_reward_scale", type=float, default=0.1, 
+                        help="Scale for distance-to-food reward shaping (0 to disable)")
     parser.add_argument("--seed", type=int, default=1337, help="Random seed")
     parser.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda"], 
                         help="Compute device")

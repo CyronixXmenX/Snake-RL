@@ -54,6 +54,7 @@ Use arrow keys or WASD to control the snake.
   - +1.0 for eating food (default)
   - -1.0 for dying (collision)
   - -0.01 per step (time penalty)
+  - **Distance-based reward shaping**: Optional dense rewards for moving toward food (improves learning)
 
 ### DQN Agent
 - **CNN architecture** optimized for small grid environments
@@ -97,6 +98,7 @@ environment:
   step_penalty: -0.01
   food_reward: 1.0
   death_reward: -1.0
+  distance_reward_scale: 0.1  # Reward shaping for guiding toward food
 
 dqn:
   learning_rate: 0.0001
@@ -339,10 +341,13 @@ Snake-RL/
 Adjust rewards to shape agent behavior:
 ```bash
 python train_dqn.py \
-  --step_penalty -0.01 \    # Encourages efficiency
-  --food_reward 1.0 \        # Reward for eating
-  --death_reward -1.0        # Penalty for dying
+  --step_penalty -0.01 \          # Encourages efficiency
+  --food_reward 1.0 \              # Reward for eating
+  --death_reward -1.0 \            # Penalty for dying
+  --distance_reward_scale 0.1      # Guides agent toward food (0 to disable)
 ```
+
+**Note**: The `distance_reward_scale` parameter provides dense reward signals by rewarding the agent for moving closer to food. This significantly improves learning by giving immediate feedback. Set to 0.0 to disable reward shaping.
 
 ---
 

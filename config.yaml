@@ -8,6 +8,7 @@ environment:
   food_reward: 1.0
   death_reward: -1.0
   max_steps_multiplier: 4.0
+  distance_reward_scale: 0.1  # Reward shaping for guiding toward food
 
 # DQN hyperparameters
 dqn:

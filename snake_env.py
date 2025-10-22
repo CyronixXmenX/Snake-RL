@@ -65,6 +65,7 @@ class SnakeEnv(gym.Env):
         max_steps_multiplier: float = 4.0,
         render_mode: str = "none",
         cell_size: int = 24,
+        distance_reward_scale: float = 0.1,
     ) -> None:
         super().__init__()
         
@@ -79,6 +80,7 @@ class SnakeEnv(gym.Env):
         self.max_steps_multiplier = float(max_steps_multiplier)
         self.render_mode = render_mode
         self.cell_size = int(cell_size)
+        self.distance_reward_scale = float(distance_reward_scale)
 
         # Observation: 3xH x W uint8 in [0, 255] -> normalized to [0,1] by agent
         self.observation_space = spaces.Box(
@@ -95,6 +97,7 @@ class SnakeEnv(gym.Env):
         self.max_steps = int(self.grid_w * self.grid_h * self.max_steps_multiplier)
         self._rng = np.random.RandomState()  # set in reset by gymnasium seeding
         self._snake_set: set[Pos] = set()  # Cache for O(1) collision checks
+        self._prev_distance_to_food: Optional[float] = None  # Track distance for reward shaping
 
         # Render members
         self._screen = None
@@ -122,6 +125,10 @@ class SnakeEnv(gym.Env):
                 self.food = p
                 return
 
+    def _manhattan_distance(self, pos1: Pos, pos2: Pos) -> float:
+        """Calculate Manhattan distance between two positions."""
+        return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
+    
     def _reset_snake(self) -> None:
         """Initialize the snake at the center of the grid."""
         cx, cy = self.grid_w // 2, self.grid_h // 2
@@ -174,6 +181,13 @@ class SnakeEnv(gym.Env):
         self.steps = 0
         self._reset_snake()
         self._spawn_food()
+        
+        # Initialize distance tracking
+        if self.food is not None:
+            self._prev_distance_to_food = self._manhattan_distance(self.snake[0], self.food)
+        else:
+            self._prev_distance_to_food = None
+        
         obs = self._get_obs()
         info: Dict[str, Any] = {}
         if self.render_mode == "human":
@@ -226,10 +240,24 @@ class SnakeEnv(gym.Env):
                 self.snake.insert(0, new_head)
                 self._snake_set.add(new_head)
                 
+                # Calculate distance-based reward shaping BEFORE eating
+                if self.food is not None and self.distance_reward_scale > 0:
+                    current_distance = self._manhattan_distance(new_head, self.food)
+                    if self._prev_distance_to_food is not None:
+                        # Reward getting closer to food, penalize moving away
+                        distance_delta = self._prev_distance_to_food - current_distance
+                        reward += distance_delta * self.distance_reward_scale
+                    self._prev_distance_to_food = current_distance
+                
                 ate = (self.food is not None and new_head == self.food)
                 if ate:
                     reward += self.food_reward
                     self._spawn_food()
+                    # Update distance for new food
+                    if self.food is not None:
+                        self._prev_distance_to_food = self._manhattan_distance(self.snake[0], self.food)
+                    else:
+                        self._prev_distance_to_food = None
                 else:
                     # Remove tail
                     tail = self.snake.pop()
