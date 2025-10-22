@@ -8,6 +8,8 @@ and Double DQN for stable learning.
 from __future__ import annotations
 
 import os
+import platform
+import warnings
 from dataclasses import dataclass, asdict
 from typing import Tuple, Dict, Any, Optional
 
@@ -15,6 +17,31 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+
+
+def _is_torch_compile_supported() -> bool:
+    """
+    Check if torch.compile is supported on the current platform.
+    
+    torch.compile requires Triton which is not available on Windows.
+    
+    Returns:
+        True if torch.compile is available and supported, False otherwise.
+    """
+    # Check if torch.compile exists (PyTorch 2.0+)
+    if not hasattr(torch, 'compile'):
+        return False
+    
+    # Triton is not available on Windows
+    if platform.system() == "Windows":
+        return False
+    
+    # Check if triton is available
+    try:
+        import triton
+        return True
+    except ImportError:
+        return False
 
 
 @dataclass
@@ -237,13 +264,36 @@ class DQNAgent:
         self.target_q.eval()
 
         # Compile models for optimized execution (PyTorch 2.0+)
-        if cfg.compile_model and hasattr(torch, 'compile'):
-            try:
-                self.q = torch.compile(self.q, mode="reduce-overhead")
-                self.target_q = torch.compile(self.target_q, mode="reduce-overhead")
-            except Exception as e:
-                # Compilation may fail on some systems, fall back to eager mode
-                pass
+        if cfg.compile_model:
+            if not _is_torch_compile_supported():
+                platform_name = platform.system()
+                if platform_name == "Windows":
+                    warnings.warn(
+                        "torch.compile is not supported on Windows (requires Triton). "
+                        "Falling back to eager mode. Training will still work but without "
+                        "the ~20-30% speedup from torch.compile. "
+                        "Set compile_model=false in your config to suppress this warning.",
+                        UserWarning,
+                        stacklevel=2
+                    )
+                else:
+                    warnings.warn(
+                        "torch.compile requested but Triton is not available. "
+                        "Falling back to eager mode. Install triton for ~20-30% speedup: "
+                        "pip install triton",
+                        UserWarning,
+                        stacklevel=2
+                    )
+            else:
+                try:
+                    self.q = torch.compile(self.q, mode="reduce-overhead")
+                    self.target_q = torch.compile(self.target_q, mode="reduce-overhead")
+                except Exception as e:
+                    warnings.warn(
+                        f"torch.compile failed: {e}. Falling back to eager mode.",
+                        UserWarning,
+                        stacklevel=2
+                    )
 
         self.optim = optim.Adam(self.q.parameters(), lr=cfg.lr)
         self.gamma = cfg.gamma
