@@ -100,6 +100,7 @@ def main() -> None:
             "step_penalty": args.step_penalty,
             "food_reward": args.food_reward,
             "death_reward": args.death_reward,
+            "distance_reward_scale": args.distance_reward_scale,
         },
         "DQN": {
             "learning_rate": args.lr,
@@ -133,6 +134,7 @@ def main() -> None:
         step_penalty=args.step_penalty,
         food_reward=args.food_reward,
         death_reward=args.death_reward,
+        distance_reward_scale=args.distance_reward_scale,
         render_mode="none",
     )
     env.reset(seed=args.seed)
