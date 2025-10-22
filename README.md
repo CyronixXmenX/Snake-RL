@@ -250,9 +250,11 @@ python evaluate_dqn.py \
 
 ### Performance Expectations
 
-- **CPU Training**: ~90 steps/second
-- **GPU Training (basic)**: ~1500 steps/second (15-20x faster)
-- **GPU Training with AMP**: ~3000 steps/second (30-35x faster)
+- **CPU Training**: ~8-10 steps/second (neural network training is CPU-intensive)
+- **GPU Training (basic)**: ~90-150 steps/second (10-15x faster than CPU)
+- **GPU Training with AMP**: ~150-200 steps/second (15-20x faster than CPU)
+
+> **Note**: The training speed depends heavily on your hardware. Modern GPUs with CUDA support provide significant speedups for neural network training.
 
 ### GPU Settings Explained
 
