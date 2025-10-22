@@ -21,6 +21,10 @@ dqn:
   target_update: 1000
   buffer_size: 100000
   train_start: 10000
+  hidden_size: 256  # Network hidden layer size
+  n_step: 1  # N-step returns (1 = standard TD)
+  gradient_steps: 1  # Gradient steps per training call
+  dueling: true  # Use Dueling DQN architecture
 
 # Training settings
 training:
