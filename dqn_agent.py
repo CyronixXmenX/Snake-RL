@@ -36,6 +36,7 @@ class DQNConfig:
     use_amp: bool = False  # Automatic Mixed Precision for faster GPU training
     pin_memory: bool = False  # Pin memory for faster data transfer to GPU (may add overhead)
     gradient_accumulation_steps: int = 1  # Gradient accumulation for larger effective batch sizes
+    compile_model: bool = False  # Use torch.compile for optimized execution (PyTorch 2.0+)
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert config to dictionary."""
@@ -235,6 +236,15 @@ class DQNAgent:
         self.target_q.load_state_dict(self.q.state_dict())
         self.target_q.eval()
 
+        # Compile models for optimized execution (PyTorch 2.0+)
+        if cfg.compile_model and hasattr(torch, 'compile'):
+            try:
+                self.q = torch.compile(self.q, mode="reduce-overhead")
+                self.target_q = torch.compile(self.target_q, mode="reduce-overhead")
+            except Exception as e:
+                # Compilation may fail on some systems, fall back to eager mode
+                pass
+
         self.optim = optim.Adam(self.q.parameters(), lr=cfg.lr)
         self.gamma = cfg.gamma
 
@@ -270,6 +280,10 @@ class DQNAgent:
         if self.use_gpu and torch.cuda.get_device_capability()[0] >= 8:
             torch.backends.cuda.matmul.allow_tf32 = True
             torch.backends.cudnn.allow_tf32 = True
+        
+        # Enable cuDNN benchmarking for faster convolutions
+        if self.use_gpu:
+            torch.backends.cudnn.benchmark = True
     
     def _get_device(self, device_cfg: str) -> torch.device:
         """Determine compute device based on configuration."""

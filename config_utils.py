@@ -86,6 +86,7 @@ def merge_config_with_args(config: Dict[str, Any], args: argparse.Namespace) -> 
         ('gpu_optimization', 'use_amp'): 'use_amp',
         ('gpu_optimization', 'pin_memory'): 'pin_memory',
         ('gpu_optimization', 'gradient_accumulation_steps'): 'gradient_accumulation_steps',
+        ('gpu_optimization', 'compile_model'): 'compile_model',
     }
     
     # Only update args that weren't explicitly set on command line
@@ -145,3 +146,5 @@ def add_training_arguments(parser: argparse.ArgumentParser) -> None:
                         help="Pin memory for faster data transfer to GPU (may add overhead for small batches)")
     parser.add_argument("--gradient_accumulation_steps", type=int, default=1,
                         help="Number of gradient accumulation steps (effective batch size = batch_size * gradient_accumulation_steps)")
+    parser.add_argument("--compile_model", action="store_true", default=False,
+                        help="Compile model with torch.compile for optimized execution (PyTorch 2.0+)")
