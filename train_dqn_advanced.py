@@ -362,6 +362,43 @@ def main() -> None:
         elapsed = time.perf_counter() - training_start_time
         if elapsed >= args.max_seconds:
             print(f"\n⏱️  Reached max_seconds={args.max_seconds}. Stopping.")
+            # Log final state before breaking
+            if steps_in_interval > 0:
+                interval_end_time = time.perf_counter()
+                interval_duration = interval_end_time - interval_start_time
+                
+                steps_per_sec = steps_in_interval / interval_duration if interval_duration > 0 else 0.0
+                updates_per_sec = updates_in_interval / interval_duration if interval_duration > 0 else 0.0
+                samples_per_sec = updates_per_sec * args.batch_size
+                
+                time_env_ms = env_timer.average_ms()
+                time_learn_ms = learn_timer.average_ms()
+                
+                gpu_util = gpu_monitor.get_utilization() if gpu_monitor else 0.0
+                
+                csv_row = {
+                    "step": step,
+                    "episodes": episode_count,
+                    "episode_return_mean": np.mean(returns) if returns else "",
+                    "episode_length_mean": np.mean(lengths) if lengths else "",
+                    "steps_per_sec": f"{steps_per_sec:.2f}",
+                    "updates_per_sec": f"{updates_per_sec:.2f}",
+                    "samples_per_sec": f"{samples_per_sec:.2f}",
+                    "time_env_ms_per_step": f"{time_env_ms:.4f}",
+                    "time_learn_ms_per_update": f"{time_learn_ms:.4f}",
+                    "replay_size": len(agent.replay),
+                    "epsilon": f"{epsilon:.4f}",
+                    "loss_q": f"{loss:.6f}" if loss is not None else "",
+                    "td_error_mean": "",
+                    "gpu_util": f"{gpu_util:.2f}" if gpu_util > 0 else "",
+                    "device": device,
+                    "batch_size": args.batch_size,
+                    "gradient_steps": args.gradient_steps,
+                    "n_envs": args.n_envs,
+                    "n_step": args.n_step,
+                    "seed": args.seed,
+                }
+                csv_logger.log(csv_row)
             break
         
         # Epsilon schedule
