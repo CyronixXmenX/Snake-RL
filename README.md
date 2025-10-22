@@ -315,9 +315,10 @@ With the GPU optimizations in this implementation:
 
 #### `compile_model` (PyTorch 2.0+)
 - **What it does**: JIT compiles the model for optimized execution
-- **When to use**: Always enable on PyTorch 2.0+ for additional 20-30% speedup
+- **When to use**: Always enable on PyTorch 2.0+ for additional 20-30% speedup (Linux/macOS only)
 - **Note**: First run is slower due to compilation, subsequent runs are faster
 - **Benefit**: Optimized CUDA kernels, graph optimizations
+- **Windows limitation**: Not supported on Windows (requires Triton). The agent will automatically fall back to eager mode with a warning if enabled on Windows
 
 ### GPU Replay Buffer
 
@@ -430,6 +431,14 @@ python train_dqn.py --batch_size 32 --gradient_accumulation_steps 4
 - Increase training steps (500k+ may be needed)
 - Verify epsilon decay is not too fast
 - Try different random seeds
+
+### torch.compile warning on Windows
+If you see a warning about torch.compile not being supported on Windows:
+```bash
+# Disable compile_model in your config
+python train_dqn.py --config config.yaml --compile_model False
+```
+Or create a Windows-specific config file with `compile_model: false`. This is expected behavior as Triton (required for torch.compile) is not available on Windows.
 
 ### Pygame display issues (on headless server)
 ```bash
