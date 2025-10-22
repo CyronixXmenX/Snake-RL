@@ -21,10 +21,6 @@ dqn:
   target_update: 1000
   buffer_size: 100000
   train_start: 10000
-  hidden_size: 512  # Larger network for GPU
-  n_step: 3  # N-step returns for faster learning
-  gradient_steps: 4  # Multiple gradient steps per call
-  dueling: true  # Dueling DQN architecture
 
 # Training settings
 training:

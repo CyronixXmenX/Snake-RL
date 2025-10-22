@@ -10,7 +10,6 @@ from __future__ import annotations
 import os
 import platform
 import warnings
-from collections import deque
 from dataclasses import dataclass, asdict
 from typing import Tuple, Dict, Any, Optional
 
@@ -60,17 +59,11 @@ class DQNConfig:
     buffer_size: int = 100_000
     train_start: int = 10_000
     device: str = "auto"  # "cpu" | "cuda" | "auto"
-    # DQN architecture options
-    dueling: bool = True  # Use Dueling DQN architecture
-    double_dqn: bool = True  # Use Double DQN (always enabled in current implementation)
-    hidden_size: int = 256  # Size of hidden layers
-    n_step: int = 1  # N-step returns (1 = standard TD)
     # GPU optimization settings
     use_amp: bool = False  # Automatic Mixed Precision for faster GPU training
     pin_memory: bool = False  # Pin memory for faster data transfer to GPU (may add overhead)
     gradient_accumulation_steps: int = 1  # Gradient accumulation for larger effective batch sizes
     compile_model: bool = False  # Use torch.compile for optimized execution (PyTorch 2.0+)
-    gradient_steps: int = 1  # Number of gradient steps per train_step call
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert config to dictionary."""
@@ -84,30 +77,16 @@ class QNetwork(nn.Module):
     Architecture:
     - 2 Conv2D layers for feature extraction
     - 2 Fully connected layers for Q-value estimation
-    - Optional Dueling architecture with value and advantage streams
     
     Args:
         in_channels: Number of input channels (3 for [head, body, food])
         num_actions: Number of possible actions (4 for up/down/left/right)
         grid_h: Height of the input grid
         grid_w: Width of the input grid
-        dueling: Whether to use Dueling DQN architecture
-        hidden_size: Size of hidden layers (default: 256)
     """
     
-    def __init__(
-        self, 
-        in_channels: int, 
-        num_actions: int, 
-        grid_h: int, 
-        grid_w: int,
-        dueling: bool = True,
-        hidden_size: int = 256
-    ) -> None:
+    def __init__(self, in_channels: int, num_actions: int, grid_h: int, grid_w: int) -> None:
         super().__init__()
-        self.dueling = dueling
-        self.num_actions = num_actions
-        
         # Small CNN for small grids
         self.features = nn.Sequential(
             nn.Conv2d(in_channels, 32, kernel_size=3, stride=1, padding=1),  # HxW
@@ -115,40 +94,15 @@ class QNetwork(nn.Module):
             nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),  # HxW
             nn.ReLU(inplace=True),
         )
-        
         # Compute flatten size dynamically
         with torch.no_grad():
             dummy = torch.zeros(1, in_channels, grid_h, grid_w)
             flat = self.features(dummy).view(1, -1).shape[1]
-        
-        if self.dueling:
-            # Dueling architecture: separate value and advantage streams
-            # Shared feature layer
-            self.feature_layer = nn.Sequential(
-                nn.Linear(flat, hidden_size),
-                nn.ReLU(inplace=True),
-            )
-            
-            # Value stream
-            self.value_stream = nn.Sequential(
-                nn.Linear(hidden_size, hidden_size // 2),
-                nn.ReLU(inplace=True),
-                nn.Linear(hidden_size // 2, 1)
-            )
-            
-            # Advantage stream
-            self.advantage_stream = nn.Sequential(
-                nn.Linear(hidden_size, hidden_size // 2),
-                nn.ReLU(inplace=True),
-                nn.Linear(hidden_size // 2, num_actions)
-            )
-        else:
-            # Standard DQN architecture
-            self.head = nn.Sequential(
-                nn.Linear(flat, hidden_size),
-                nn.ReLU(inplace=True),
-                nn.Linear(hidden_size, num_actions),
-            )
+        self.head = nn.Sequential(
+            nn.Linear(flat, 256),
+            nn.ReLU(inplace=True),
+            nn.Linear(256, num_actions),
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -162,19 +116,8 @@ class QNetwork(nn.Module):
         """
         x = self.features(x)
         x = x.view(x.size(0), -1)
-        
-        if self.dueling:
-            features = self.feature_layer(x)
-            value = self.value_stream(features)
-            advantage = self.advantage_stream(features)
-            
-            # Q(s,a) = V(s) + (A(s,a) - mean(A(s,a)))
-            # Using mean instead of max for stability
-            q = value + (advantage - advantage.mean(dim=1, keepdim=True))
-            return q
-        else:
-            q = self.head(x)
-            return q
+        q = self.head(x)
+        return q
 
 
 class ReplayBuffer:
@@ -183,15 +126,12 @@ class ReplayBuffer:
     
     Stores transitions (state, action, reward, next_state, done) for training.
     Uses circular buffer for constant memory usage.
-    Supports n-step returns for improved learning.
     
     Args:
         capacity: Maximum number of transitions to store
         obs_shape: Shape of observations (C, H, W)
         device: Device for storing tensors ('cpu' or 'cuda')
         pin_memory: Whether to pin memory for faster GPU transfer
-        n_step: Number of steps for n-step returns (1 = standard TD)
-        gamma: Discount factor for n-step returns
     """
     
     def __init__(
@@ -199,9 +139,7 @@ class ReplayBuffer:
         capacity: int, 
         obs_shape: Tuple[int, int, int],
         device: Optional[torch.device] = None,
-        pin_memory: bool = False,
-        n_step: int = 1,
-        gamma: float = 0.99
+        pin_memory: bool = False
     ) -> None:
         self.capacity = capacity
         self.obs_shape = obs_shape  # (C, H, W)
@@ -211,9 +149,6 @@ class ReplayBuffer:
         self.use_gpu = self.device.type == "cuda"
         # Only pin memory if CUDA is available and we're on CPU
         self.pin_memory = pin_memory and not self.use_gpu and torch.cuda.is_available()
-        self.n_step = n_step
-        self.gamma = gamma
-        self.n_step_buffer: deque = deque(maxlen=n_step)
 
         if self.use_gpu:
             # Store data directly on GPU for zero-copy sampling
@@ -246,7 +181,7 @@ class ReplayBuffer:
         done: bool
     ) -> None:
         """
-        Add a transition to the buffer with n-step return support.
+        Add a transition to the buffer.
         
         Args:
             obs: Current observation
@@ -255,43 +190,19 @@ class ReplayBuffer:
             next_obs: Next observation
             done: Whether episode terminated
         """
-        # Add to n-step buffer
-        self.n_step_buffer.append((obs, action, reward, next_obs, done))
-        
-        # Only push to main buffer when we have n steps or episode ends
-        if len(self.n_step_buffer) < self.n_step and not done:
-            return
-        
-        # Compute n-step return
-        n_step_obs, n_step_action = self.n_step_buffer[0][:2]
-        n_step_reward = 0.0
-        n_step_next_obs = next_obs
-        n_step_done = done
-        
-        for i, (_, _, r, next_o, d) in enumerate(self.n_step_buffer):
-            n_step_reward += (self.gamma ** i) * r
-            if d:
-                n_step_next_obs = next_o
-                n_step_done = True
-                break
-        
-        # Store the n-step transition
+        # Convert numpy arrays to tensors directly on target device
         if self.use_gpu:
-            self.obs[self.ptr].copy_(torch.from_numpy(n_step_obs))
-            self.next_obs[self.ptr].copy_(torch.from_numpy(n_step_next_obs))
+            self.obs[self.ptr].copy_(torch.from_numpy(obs))
+            self.next_obs[self.ptr].copy_(torch.from_numpy(next_obs))
         else:
-            self.obs[self.ptr] = torch.from_numpy(n_step_obs)
-            self.next_obs[self.ptr] = torch.from_numpy(n_step_next_obs)
+            self.obs[self.ptr] = torch.from_numpy(obs)
+            self.next_obs[self.ptr] = torch.from_numpy(next_obs)
         
-        self.actions[self.ptr] = int(n_step_action)
-        self.rewards[self.ptr] = float(n_step_reward)
-        self.dones[self.ptr] = bool(n_step_done)
+        self.actions[self.ptr] = action
+        self.rewards[self.ptr] = reward
+        self.dones[self.ptr] = done
         self.ptr = (self.ptr + 1) % self.capacity
         self.size = min(self.size + 1, self.capacity)
-        
-        # Clear n-step buffer on episode end
-        if done:
-            self.n_step_buffer.clear()
 
     def sample(self, batch_size: int) -> Dict[str, torch.Tensor]:
         """
@@ -347,22 +258,8 @@ class DQNAgent:
         self.device = self._get_device(cfg.device)
 
         # Initialize networks
-        self.q = QNetwork(
-            cfg.in_channels, 
-            cfg.num_actions, 
-            cfg.grid_h, 
-            cfg.grid_w,
-            dueling=cfg.dueling,
-            hidden_size=cfg.hidden_size
-        ).to(self.device)
-        self.target_q = QNetwork(
-            cfg.in_channels, 
-            cfg.num_actions, 
-            cfg.grid_h, 
-            cfg.grid_w,
-            dueling=cfg.dueling,
-            hidden_size=cfg.hidden_size
-        ).to(self.device)
+        self.q = QNetwork(cfg.in_channels, cfg.num_actions, cfg.grid_h, cfg.grid_w).to(self.device)
+        self.target_q = QNetwork(cfg.in_channels, cfg.num_actions, cfg.grid_h, cfg.grid_w).to(self.device)
         self.target_q.load_state_dict(self.q.state_dict())
         self.target_q.eval()
 
@@ -407,14 +304,11 @@ class DQNAgent:
             cfg.buffer_size, 
             (cfg.in_channels, cfg.grid_h, cfg.grid_w),
             device=buffer_device,
-            pin_memory=cfg.pin_memory,
-            n_step=cfg.n_step,
-            gamma=cfg.gamma
+            pin_memory=cfg.pin_memory
         )
         self.batch_size = cfg.batch_size
         self.train_start = cfg.train_start
         self.target_update = cfg.target_update
-        self.gradient_steps_per_call = cfg.gradient_steps
 
         self.train_steps = 0
         
@@ -480,94 +374,83 @@ class DQNAgent:
 
     def train_step(self) -> Optional[float]:
         """
-        Perform training steps (if buffer is sufficiently filled).
+        Perform one training step (if buffer is sufficiently filled).
         
-        Samples batches from replay buffer, computes TD error using Double DQN,
-        and updates the Q-network. Performs multiple gradient steps per call.
-        Periodically updates target network.
+        Samples a batch from replay buffer, computes TD error using Double DQN,
+        and updates the Q-network. Periodically updates target network.
         Supports mixed precision training and gradient accumulation.
         
         Returns:
-            Average loss value if training occurred, None otherwise
+            Loss value if training occurred, None otherwise
         """
         if self.replay.size < self.train_start:
             return None
 
-        total_loss = 0.0
+        # Sample batch - already on correct device (GPU or CPU)
+        batch = self.replay.sample(self.batch_size)
         
-        # Perform multiple gradient steps per call for better GPU utilization
-        for _ in range(self.gradient_steps_per_call):
-            # Sample batch - already on correct device (GPU or CPU)
-            batch = self.replay.sample(self.batch_size)
+        # Convert uint8 observations to float32 [0, 1] - keep on same device
+        # Use contiguous() to ensure efficient memory layout
+        obs = batch["obs"].float().div_(255.0).contiguous()
+        next_obs = batch["next_obs"].float().div_(255.0).contiguous()
+        actions = batch["actions"]
+        rewards = batch["rewards"]
+        dones = batch["dones"].float()
+        
+        # If buffer is on CPU but model is on GPU, transfer now (async if pinned)
+        if not self.use_gpu or self.replay.device.type == "cpu":
+            obs = obs.to(self.device, non_blocking=self.pin_memory)
+            next_obs = next_obs.to(self.device, non_blocking=self.pin_memory)
+            actions = actions.to(self.device, non_blocking=self.pin_memory)
+            rewards = rewards.to(self.device, non_blocking=self.pin_memory)
+            dones = dones.to(self.device, non_blocking=self.pin_memory)
+
+        # Forward pass with optional automatic mixed precision
+        with torch.amp.autocast(device_type=self.device.type, enabled=self.use_amp):
+            # Current Q(s,a)
+            q_values = self.q(obs)
+            q_sa = q_values.gather(1, actions.unsqueeze(1)).squeeze(1)
+
+            with torch.no_grad():
+                # Double DQN: action selection by online net, evaluation by target net
+                next_q_values = self.q(next_obs)
+                next_actions = next_q_values.argmax(dim=1, keepdim=True)  # (B,1)
+                next_target_q_values = self.target_q(next_obs)
+                next_q = next_target_q_values.gather(1, next_actions).squeeze(1)
+                target = rewards + (1.0 - dones) * self.gamma * next_q
+
+            loss = self.loss_fn(q_sa, target)
             
-            # Convert uint8 observations to float32 [0, 1] - keep on same device
-            # Use contiguous() to ensure efficient memory layout
-            obs = batch["obs"].float().div_(255.0).contiguous()
-            next_obs = batch["next_obs"].float().div_(255.0).contiguous()
-            actions = batch["actions"]
-            rewards = batch["rewards"]
-            dones = batch["dones"].float()
-            
-            # If buffer is on CPU but model is on GPU, transfer now (async if pinned)
-            if not self.use_gpu or self.replay.device.type == "cpu":
-                obs = obs.to(self.device, non_blocking=self.pin_memory)
-                next_obs = next_obs.to(self.device, non_blocking=self.pin_memory)
-                actions = actions.to(self.device, non_blocking=self.pin_memory)
-                rewards = rewards.to(self.device, non_blocking=self.pin_memory)
-                dones = dones.to(self.device, non_blocking=self.pin_memory)
+            # Scale loss for gradient accumulation
+            loss = loss / self.gradient_accumulation_steps
 
-            # Forward pass with optional automatic mixed precision
-            with torch.amp.autocast(device_type=self.device.type, enabled=self.use_amp):
-                # Current Q(s,a)
-                q_values = self.q(obs)
-                q_sa = q_values.gather(1, actions.unsqueeze(1)).squeeze(1)
-
-                with torch.no_grad():
-                    # Double DQN: action selection by online net, evaluation by target net
-                    next_q_values = self.q(next_obs)
-                    next_actions = next_q_values.argmax(dim=1, keepdim=True)  # (B,1)
-                    next_target_q_values = self.target_q(next_obs)
-                    
-                    # Adjust gamma for n-step returns (already incorporated in n-step reward computation)
-                    # For n-step, the effective gamma is gamma^n
-                    effective_gamma = self.gamma ** self.cfg.n_step
-                    next_q = next_target_q_values.gather(1, next_actions).squeeze(1)
-                    target = rewards + (1.0 - dones) * effective_gamma * next_q
-
-                loss = self.loss_fn(q_sa, target)
-                
-                # Scale loss for gradient accumulation
-                loss = loss / self.gradient_accumulation_steps
-
-            # Backward pass with optional gradient scaling for mixed precision
+        # Backward pass with optional gradient scaling for mixed precision
+        if self.use_amp and self.scaler is not None:
+            self.scaler.scale(loss).backward()
+        else:
+            loss.backward()
+        
+        self._accumulated_steps += 1
+        
+        # Only step optimizer after accumulating gradients
+        if self._accumulated_steps >= self.gradient_accumulation_steps:
             if self.use_amp and self.scaler is not None:
-                self.scaler.scale(loss).backward()
+                self.scaler.unscale_(self.optim)
+                torch.nn.utils.clip_grad_norm_(self.q.parameters(), max_norm=10.0)
+                self.scaler.step(self.optim)
+                self.scaler.update()
             else:
-                loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.q.parameters(), max_norm=10.0)
+                self.optim.step()
             
-            self._accumulated_steps += 1
-            
-            # Only step optimizer after accumulating gradients
-            if self._accumulated_steps >= self.gradient_accumulation_steps:
-                if self.use_amp and self.scaler is not None:
-                    self.scaler.unscale_(self.optim)
-                    torch.nn.utils.clip_grad_norm_(self.q.parameters(), max_norm=10.0)
-                    self.scaler.step(self.optim)
-                    self.scaler.update()
-                else:
-                    torch.nn.utils.clip_grad_norm_(self.q.parameters(), max_norm=10.0)
-                    self.optim.step()
-                
-                self.optim.zero_grad(set_to_none=True)
-                self._accumulated_steps = 0
+            self.optim.zero_grad(set_to_none=True)
+            self._accumulated_steps = 0
 
-            self.train_steps += 1
-            if self.train_steps % self.target_update == 0:
-                self.target_q.load_state_dict(self.q.state_dict())
+        self.train_steps += 1
+        if self.train_steps % self.target_update == 0:
+            self.target_q.load_state_dict(self.q.state_dict())
 
-            total_loss += float(loss.item() * self.gradient_accumulation_steps)
-
-        return total_loss / self.gradient_steps_per_call
+        return float(loss.item() * self.gradient_accumulation_steps)
 
     def save(self, path: str) -> None:
         """
