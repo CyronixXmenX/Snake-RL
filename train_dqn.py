@@ -146,7 +146,7 @@ def main() -> None:
     )
     env.reset(seed=args.seed)
 
-    # Create agent with advanced features
+    # Create agent
     cfg = DQNConfig(
         grid_w=args.grid_w,
         grid_h=args.grid_h,
@@ -157,10 +157,6 @@ def main() -> None:
         buffer_size=args.buffer_size,
         train_start=args.train_start,
         device=args.device,
-        dueling=True,  # Enable Dueling DQN by default
-        hidden_size=256,  # Default hidden size
-        n_step=1,  # Can be configured via config file
-        gradient_steps=1,  # Single gradient step per call (original behavior)
         use_amp=args.use_amp,
         pin_memory=args.pin_memory,
         gradient_accumulation_steps=args.gradient_accumulation_steps,

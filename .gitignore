@@ -38,7 +38,3 @@ logs/
 
 # Benchmark results
 benchmark_results/
-
-# Training runs and artifacts
-runs/
-*.pt
