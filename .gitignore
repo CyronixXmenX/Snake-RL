@@ -35,3 +35,6 @@ highscore.txt
 # Logs
 *.log
 logs/
+
+# Benchmark results
+benchmark_results/

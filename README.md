@@ -228,6 +228,20 @@ python benchmark_gpu.py --num_steps 1000 --batch_size 128
 python benchmark_gpu.py --compare --num_steps 1000
 ```
 
+**Option 6: Find Best Hyperparameters**
+```bash
+# Quick hyperparameter search
+python benchmark_hyperparameters.py --benchmark_steps 20000
+
+# Comprehensive search with multiple runs
+python benchmark_hyperparameters.py --benchmark_steps 100000 --n_runs 3
+
+# Custom parameter ranges
+python benchmark_hyperparameters.py --lr 0.0001 0.0002 --batch_size 32 64 128
+```
+
+See [BENCHMARK_GUIDE.md](BENCHMARK_GUIDE.md) for detailed usage instructions.
+
 ### Training Output
 
 During training, you'll see:
@@ -346,19 +360,21 @@ python train_dqn.py \
 
 ```
 Snake-RL/
-├── train_dqn.py          # Main training script
-├── evaluate_dqn.py       # Model evaluation script
-├── benchmark_gpu.py      # GPU performance benchmarking
-├── main.py               # Manual play (Pygame)
-├── snake_env.py          # Gymnasium Snake environment
-├── dqn_agent.py          # DQN agent implementation
-├── config_utils.py       # Configuration management
-├── logger_utils.py       # Training logging utilities
-├── config.yaml           # CPU training config
-├── config_gpu.yaml       # GPU training config
-├── requirements.txt      # Python dependencies
-├── checkpoints/          # Saved model checkpoints
-└── README.md             # This file
+├── train_dqn.py                # Main training script
+├── evaluate_dqn.py             # Model evaluation script
+├── benchmark_gpu.py            # GPU performance benchmarking
+├── benchmark_hyperparameters.py # Hyperparameter grid search
+├── main.py                     # Manual play (Pygame)
+├── snake_env.py                # Gymnasium Snake environment
+├── dqn_agent.py                # DQN agent implementation
+├── config_utils.py             # Configuration management
+├── logger_utils.py             # Training logging utilities
+├── config.yaml                 # CPU training config
+├── config_gpu.yaml             # GPU training config
+├── requirements.txt            # Python dependencies
+├── checkpoints/                # Saved model checkpoints
+├── BENCHMARK_GUIDE.md          # Hyperparameter benchmark guide
+└── README.md                   # This file
 ```
 
 ---
