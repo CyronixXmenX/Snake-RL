@@ -360,21 +360,22 @@ python train_dqn.py \
 
 ```
 Snake-RL/
-├── train_dqn.py                # Main training script
-├── evaluate_dqn.py             # Model evaluation script
-├── benchmark_gpu.py            # GPU performance benchmarking
+├── train_dqn.py                 # Main training script
+├── evaluate_dqn.py              # Model evaluation script
+├── benchmark_gpu.py             # GPU performance benchmarking
 ├── benchmark_hyperparameters.py # Hyperparameter grid search
-├── main.py                     # Manual play (Pygame)
-├── snake_env.py                # Gymnasium Snake environment
-├── dqn_agent.py                # DQN agent implementation
-├── config_utils.py             # Configuration management
-├── logger_utils.py             # Training logging utilities
-├── config.yaml                 # CPU training config
-├── config_gpu.yaml             # GPU training config
-├── requirements.txt            # Python dependencies
-├── checkpoints/                # Saved model checkpoints
-├── BENCHMARK_GUIDE.md          # Hyperparameter benchmark guide
-└── README.md                   # This file
+├── main.py                      # Manual play (Pygame)
+├── snake_env.py                 # Gymnasium Snake environment
+├── dqn_agent.py                 # DQN agent implementation
+├── config_utils.py              # Configuration management
+├── logger_utils.py              # Training logging utilities
+├── config.yaml                  # CPU training config
+├── config_gpu.yaml              # GPU training config
+├── benchmark_config_example.yaml # Benchmark parameter ranges
+├── requirements.txt             # Python dependencies
+├── checkpoints/                 # Saved model checkpoints
+├── BENCHMARK_GUIDE.md           # Hyperparameter benchmark guide
+└── README.md                    # This file
 ```
 
 ---
