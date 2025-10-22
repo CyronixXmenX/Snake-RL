@@ -510,13 +510,260 @@ Typical learning curve:
 
 ---
 
+## 🚄 High-Throughput Training (NEW!)
+
+We now provide advanced training scripts optimized for maximum GPU utilization and throughput:
+
+### Advanced DQN Training
+
+High-throughput training with vectorized environments, profiling, and GPU monitoring:
+
+```bash
+# High-throughput training (recommended for GPU)
+python train_dqn_advanced.py \
+  --config config_high_throughput.yaml \
+  --profile \
+  --log_dir runs/high_throughput
+
+# Custom high-throughput setup
+python train_dqn_advanced.py \
+  --device cuda \
+  --batch_size 1024 \
+  --n_envs 8 \
+  --gradient_steps 16 \
+  --n_step 3 \
+  --hidden_size 512 \
+  --total_steps 2000000 \
+  --profile
+```
+
+**Features:**
+- ✅ **Dueling DQN** architecture by default
+- ✅ **N-step returns** (n=1-5) for faster learning
+- ✅ **Multiple gradient steps** per environment step for better GPU utilization
+- ✅ **Vectorized environments** (8-16 parallel envs)
+- ✅ **Large batch sizes** (512-4096) for GPU efficiency
+- ✅ **GPU utilization monitoring** with pynvml
+- ✅ **TensorBoard logging** with comprehensive metrics
+- ✅ **Performance profiling** (env/learner time split, FPS)
+
+**Expected Performance:**
+- GPU utilization: **>50% during training steps** (peaks can be higher)
+- Throughput: **500-1000+ steps/sec** (depends on GPU)
+- Speedup: **20-50x faster** than CPU baseline
+- Mean return target: **>5.0 within 2M steps**
+
+### Stable-Baselines3 Training
+
+Use the battle-tested SB3 library for baseline comparisons:
+
+```bash
+# Standard DQN with SB3
+python train_sb3_dqn.py \
+  --algo dqn \
+  --batch_size 1024 \
+  --n_envs 4 \
+  --gradient_steps 16 \
+  --device cuda
+
+# QR-DQN (distributional, often stronger)
+python train_sb3_dqn.py \
+  --algo qrdqn \
+  --batch_size 2048 \
+  --n_envs 8 \
+  --gradient_steps 32 \
+  --device cuda
+```
+
+**Why use SB3?**
+- ✅ Production-ready, well-tested implementation
+- ✅ Support for QR-DQN (distributional DQN)
+- ✅ Easy to use with minimal code
+- ✅ Great for baselines and comparisons
+
+### Hyperparameter Optimization
+
+Automatically find the best hyperparameters using Optuna:
+
+```bash
+# Run HPO study (30 trials)
+python hpo_optuna.py \
+  --n_trials 30 \
+  --trial_steps 200000 \
+  --device cuda \
+  --study_name snake_hpo
+
+# Advanced HPO (optimize rewards too)
+python hpo_optuna.py \
+  --n_trials 50 \
+  --trial_steps 200000 \
+  --optimize_rewards \
+  --n_jobs 2 \
+  --device cuda
+```
+
+**Search space includes:**
+- Learning rate, batch size, hidden size
+- N-step returns, gradient steps
+- Target update interval, gamma
+- Exploration schedule
+- Optional: reward shaping parameters
+
+---
+
+## 📈 Performance Targets
+
+Based on the high-throughput configuration, you should achieve:
+
+| Metric | Target | Notes |
+|--------|--------|-------|
+| **GPU Utilization** | >50% during updates | Peaks can be 70-90% |
+| **Throughput** | 500-1000 steps/sec | GPU-dependent |
+| **Mean Return** | >5.0 @ 2M steps | 24x20 grid |
+| **Episode Length** | 50+ steps | After convergence |
+| **Speedup vs CPU** | 20-50x | With AMP + compile |
+
+### Optimization Tips
+
+**Maximize GPU Utilization:**
+1. Use large batch sizes (1024-4096)
+2. Multiple gradient steps per env step (8-32)
+3. Vectorized environments (8-16 parallel)
+4. Enable AMP (mixed precision training)
+5. Enable torch.compile (PyTorch 2.0+)
+6. Keep data on GPU (replay buffer on GPU)
+
+**If GPU utilization is low (<30%):**
+- Increase batch size
+- Increase gradient steps
+- Increase network size (hidden_size)
+- Reduce train_freq (train more often)
+- Check for CPU bottlenecks in env stepping
+
+**If training is unstable:**
+- Reduce learning rate
+- Use smaller batch sizes initially
+- Increase learning_starts (prefill buffer more)
+- Enable gradient clipping (already enabled at 10.0)
+- Reduce n_step (try n=1 or n=3)
+
+---
+
+## 🔧 Advanced Configuration
+
+### High-Throughput Config Template
+
+See `config_high_throughput.yaml` for a complete example:
+
+```yaml
+dqn:
+  learning_rate: 0.0003
+  batch_size: 1024  # Scale to 2048-4096 for modern GPUs
+  buffer_size: 1000000
+  learning_starts: 50000
+  hidden_size: 512
+  n_step: 3
+  gradient_steps: 16
+  dueling: true
+
+training:
+  n_envs: 8  # Parallel environments
+  train_freq: 4  # Train every N env steps
+  device: cuda
+
+gpu_optimization:
+  use_amp: true
+  compile_model: true
+```
+
+### CLI Options (Advanced Training)
+
+```
+--n_envs N              Number of parallel environments (default: 1)
+--train_freq N          Train every N environment steps (default: 4)
+--gradient_steps N      Gradient steps per training call (default: 1)
+--n_step N              N-step returns, 1-5 recommended (default: 1)
+--dueling               Use Dueling DQN architecture (default: True)
+--hidden_size N         Hidden layer size (default: 512)
+--profile               Enable detailed profiling
+--log_dir DIR           TensorBoard log directory
+```
+
+---
+
+## 📊 Monitoring & Profiling
+
+### TensorBoard
+
+View training metrics in real-time:
+
+```bash
+# Start TensorBoard
+tensorboard --logdir runs/
+
+# Then open: http://localhost:6006
+```
+
+**Metrics logged:**
+- Training: return, loss, epsilon, buffer size
+- Evaluation: return, episode length
+- Performance: env FPS, env/learner time split
+- GPU: utilization, memory usage (if pynvml available)
+
+### GPU Utilization
+
+Monitor GPU during training:
+
+```bash
+# In another terminal
+watch -n 1 nvidia-smi
+
+# Or use detailed monitoring
+nvidia-smi dmon -s u
+```
+
+**Expected patterns:**
+- During environment steps: Low GPU usage (10-30%)
+- During training steps: High GPU usage (50-90%)
+- Overall average: 30-60% (depending on train_freq)
+
+---
+
+## 🔬 Benchmarking
+
+Compare different configurations:
+
+```bash
+# Baseline (small batch, single env)
+python train_dqn_advanced.py \
+  --batch_size 64 --n_envs 1 --gradient_steps 1 \
+  --total_steps 500000 --profile
+
+# High-throughput (large batch, multi-env)
+python train_dqn_advanced.py \
+  --batch_size 1024 --n_envs 8 --gradient_steps 16 \
+  --total_steps 500000 --profile
+
+# Ultra (maximum GPU utilization)
+python train_dqn_advanced.py \
+  --batch_size 2048 --n_envs 16 --gradient_steps 32 \
+  --hidden_size 1024 --total_steps 500000 --profile
+```
+
+Compare wall-clock time and final performance.
+
+---
+
 ## 🔗 Additional Resources
 
 - [PyTorch Documentation](https://pytorch.org/docs/stable/index.html)
 - [Gymnasium API](https://gymnasium.farama.org/)
 - [DQN Paper](https://arxiv.org/abs/1312.5602) - Original Deep Q-Learning
 - [Double DQN Paper](https://arxiv.org/abs/1509.06461) - Improved Q-Learning
+- [Dueling DQN Paper](https://arxiv.org/abs/1511.06581) - Dueling Network Architectures
+- [Rainbow Paper](https://arxiv.org/abs/1710.02298) - Combining Improvements in DQN
+- [Stable-Baselines3 Docs](https://stable-baselines3.readthedocs.io/)
 
 ---
 
-**Happy Training! 🐍🎮**
+**Happy Training! 🐍🎮🚀**
