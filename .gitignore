@@ -9,9 +9,9 @@ dist/
 build/
 *.egg
 
-# PyTorch models (keep checkpoints only)
-/*.pth
-checkpoints/*.pth
+# PyTorch models and checkpoints
+*.pth
+checkpoints/
 
 # Virtual environments
 venv/
