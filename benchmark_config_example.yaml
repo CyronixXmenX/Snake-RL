@@ -1,0 +1,88 @@
+# Example configuration for hyperparameter benchmark
+# This file documents the search space - actual parameters are passed via CLI
+
+# Quick Test Configuration (fast, explores main parameters)
+# Usage: python benchmark_hyperparameters.py --benchmark_steps 20000 \
+#          --lr 0.0001 0.0002 --batch_size 64 --gamma 0.99 \
+#          --epsilon_decay 10000 20000 --distance_reward 0.0 0.1
+
+# Recommended Search Ranges:
+
+learning_rates:
+  - 0.0001    # Conservative, stable learning
+  - 0.0002    # Moderate, good for GPU
+  - 0.0005    # Aggressive, may be unstable
+
+batch_sizes:
+  - 32        # Small, faster updates
+  - 64        # Balanced (default)
+  - 128       # Large, more stable gradients
+
+gamma_values:
+  - 0.95      # Less focus on future rewards
+  - 0.99      # Standard discount factor
+
+epsilon_decay_steps:
+  - 10000     # Fast decay, quick exploitation
+  - 20000     # Balanced exploration/exploitation
+  - 30000     # Slow decay, more exploration
+
+distance_reward_scales:
+  - 0.0       # Sparse rewards only (harder to learn)
+  - 0.05      # Light reward shaping
+  - 0.1       # Moderate reward shaping (default)
+  - 0.2       # Strong reward shaping
+
+# Fixed Parameters (not searched by default):
+
+buffer_sizes:
+  - 50000     # Standard buffer size
+
+target_update_intervals:
+  - 1000      # Steps between target network updates
+
+# Environment Settings (usually kept constant):
+
+environment:
+  grid_width: 24
+  grid_height: 20
+  step_penalty: -0.01
+  food_reward: 1.0
+  death_reward: -1.0
+
+# Benchmark Settings:
+
+benchmark:
+  steps_per_config: 50000      # Training steps per configuration
+  eval_interval: 10000         # Evaluation frequency
+  eval_episodes: 5             # Episodes per evaluation
+  n_runs_per_config: 1         # Runs per config (increase for stability)
+  device: auto                 # auto, cpu, or cuda
+  seed_base: 42               # Base random seed
+  output_dir: benchmark_results
+
+# Usage Examples:
+
+# 1. Quick test (2-3 minutes):
+#    python benchmark_hyperparameters.py --benchmark_steps 10000 \
+#      --lr 0.0001 0.0002 --batch_size 64 --gamma 0.99 \
+#      --epsilon_decay 10000 --distance_reward 0.0 0.1
+
+# 2. Moderate search (~30 minutes):
+#    python benchmark_hyperparameters.py --benchmark_steps 50000 \
+#      --lr 0.0001 0.0002 0.0005 --batch_size 32 64 128 \
+#      --gamma 0.99 --epsilon_decay 10000 20000 \
+#      --distance_reward 0.0 0.1
+
+# 3. Comprehensive search (several hours):
+#    python benchmark_hyperparameters.py --benchmark_steps 100000 \
+#      --n_runs 3
+
+# 4. Focus on specific parameter:
+#    python benchmark_hyperparameters.py --benchmark_steps 50000 \
+#      --lr 0.00005 0.0001 0.00015 0.0002 0.00025 \
+#      --batch_size 64 --gamma 0.99 --epsilon_decay 20000 \
+#      --distance_reward 0.1 --n_runs 3
+
+# Note: This is a documentation file. The benchmark script uses command-line
+# arguments directly. See BENCHMARK_GUIDE.md for detailed usage instructions.
