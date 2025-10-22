@@ -68,6 +68,9 @@ def merge_config_with_args(config: Dict[str, Any], args: argparse.Namespace) -> 
         ('environment', 'food_reward'): 'food_reward',
         ('environment', 'death_reward'): 'death_reward',
         ('environment', 'distance_reward_scale'): 'distance_reward_scale',
+        ('environment', 'loop_penalty'): 'loop_penalty',
+        ('environment', 'exploration_reward_scale'): 'exploration_reward_scale',
+        ('environment', 'loop_detection_window'): 'loop_detection_window',
         ('dqn', 'learning_rate'): 'lr',
         ('dqn', 'gamma'): 'gamma',
         ('dqn', 'batch_size'): 'batch_size',
@@ -130,6 +133,12 @@ def add_training_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--death_reward", type=float, default=-1.0, help="Penalty for dying")
     parser.add_argument("--distance_reward_scale", type=float, default=0.1, 
                         help="Scale for distance-to-food reward shaping (0 to disable)")
+    parser.add_argument("--loop_penalty", type=float, default=-0.05,
+                        help="Penalty for revisiting recent positions (negative value)")
+    parser.add_argument("--exploration_reward_scale", type=float, default=0.02,
+                        help="Scale for heatmap-based exploration rewards (0 to disable)")
+    parser.add_argument("--loop_detection_window", type=int, default=8,
+                        help="Number of recent positions to track for loop detection")
     parser.add_argument("--seed", type=int, default=1337, help="Random seed")
     parser.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda"], 
                         help="Compute device")
