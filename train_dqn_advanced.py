@@ -1,22 +1,28 @@
 """
-Advanced training script for high-throughput DQN on Snake environment.
+Fast-first DQN training script for Snake RL.
 
-Features:
-- Vectorized environments for higher throughput
-- GPU profiling and utilization monitoring
-- Multiple gradient steps per environment step
-- Comprehensive logging (TensorBoard)
-- Support for various DQN variants (Dueling, n-step)
-- Performance metrics (FPS, GPU util, env/learner time split)
+Implements a DQN training loop optimized for rapid iteration (≤5 minutes by default)
+with comprehensive logging and optional performance modes.
+
+Key Features:
+- Fast defaults: batch_size=256, gradient_steps=2, total_steps=50k, max_seconds=300
+- Wall-clock timeout (max_seconds) and step limit (total_steps)
+- CSV metrics + TensorBoard logging with timing instrumentation
+- Pinned memory + non_blocking GPU transfers
+- Optional GPU utilization monitoring
+- Double DQN + Dueling architecture
 """
 
 from __future__ import annotations
 
 import argparse
+import csv
 import os
+import random
 import time
 from collections import deque
-from typing import Tuple, Optional
+from pathlib import Path
+from typing import Tuple, Optional, Dict, Any
 import warnings
 
 import numpy as np
@@ -28,26 +34,25 @@ try:
     PYNVML_AVAILABLE = True
 except ImportError:
     PYNVML_AVAILABLE = False
-    warnings.warn("pynvml not available. GPU utilization monitoring disabled. Install with: pip install pynvml")
 
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_AVAILABLE = True
 except ImportError:
     TENSORBOARD_AVAILABLE = False
-    warnings.warn("TensorBoard not available. Logging disabled. Install with: pip install tensorboard")
+    warnings.warn("TensorBoard not available. Install with: pip install tensorboard")
 
 from snake_env import SnakeEnv
 from dqn_agent import DQNAgent, DQNConfig
-from config_utils import load_config, merge_config_with_args, add_training_arguments
 
 
 class GPUMonitor:
-    """Monitor GPU utilization using pynvml."""
+    """Monitor GPU utilization using pynvml (optional)."""
     
     def __init__(self, device_index: int = 0):
         self.enabled = PYNVML_AVAILABLE and torch.cuda.is_available()
         self.device_index = device_index
+        self.handle = None
         
         if self.enabled:
             try:
@@ -57,74 +62,93 @@ class GPUMonitor:
                 warnings.warn(f"Failed to initialize GPU monitor: {e}")
                 self.enabled = False
     
-    def get_utilization(self) -> Tuple[float, float]:
-        """Get GPU and memory utilization percentages."""
-        if not self.enabled:
-            return 0.0, 0.0
+    def get_utilization(self) -> float:
+        """Get GPU utilization percentage (0-100)."""
+        if not self.enabled or self.handle is None:
+            return 0.0
         
         try:
             util = pynvml.nvmlDeviceGetUtilizationRates(self.handle)
-            return float(util.gpu), float(util.memory)
+            return float(util.gpu)
         except Exception:
-            return 0.0, 0.0
+            return 0.0
     
     def __del__(self):
-        if self.enabled:
+        if self.enabled and self.handle is not None:
             try:
                 pynvml.nvmlShutdown()
             except Exception:
                 pass
 
 
-class VectorizedEnvWrapper:
-    """
-    Simple vectorized environment wrapper for multiple Snake environments.
-    Runs environments sequentially but provides batched interface.
-    For true parallelism, use gymnasium.vector.AsyncVectorEnv.
-    """
+class CSVLogger:
+    """CSV logger for metrics with exact schema."""
     
-    def __init__(self, env_fns, n_envs: int):
-        self.envs = [env_fn() for env_fn in env_fns[:n_envs]]
-        self.n_envs = n_envs
-        self.observation_space = self.envs[0].observation_space
-        self.action_space = self.envs[0].action_space
+    HEADER = [
+        "step", "episodes", "episode_return_mean", "episode_length_mean",
+        "steps_per_sec", "updates_per_sec", "samples_per_sec",
+        "time_env_ms_per_step", "time_learn_ms_per_update",
+        "replay_size", "epsilon", "loss_q", "td_error_mean",
+        "gpu_util", "device", "batch_size", "gradient_steps",
+        "n_envs", "n_step", "seed"
+    ]
     
-    def reset(self, seed: Optional[int] = None):
-        obs_list = []
-        info_list = []
-        for i, env in enumerate(self.envs):
-            env_seed = None if seed is None else seed + i
-            obs, info = env.reset(seed=env_seed)
-            obs_list.append(obs)
-            info_list.append(info)
-        return np.array(obs_list), info_list
+    def __init__(self, filepath: str):
+        self.filepath = filepath
+        self.file = open(filepath, 'w', newline='')
+        self.writer = csv.DictWriter(self.file, fieldnames=self.HEADER)
+        self.writer.writeheader()
+        self.file.flush()
     
-    def step(self, actions):
-        obs_list = []
-        reward_list = []
-        terminated_list = []
-        truncated_list = []
-        info_list = []
-        
-        for env, action in zip(self.envs, actions):
-            obs, reward, terminated, truncated, info = env.step(action)
-            obs_list.append(obs)
-            reward_list.append(reward)
-            terminated_list.append(terminated)
-            truncated_list.append(truncated)
-            info_list.append(info)
-        
-        return (
-            np.array(obs_list),
-            np.array(reward_list),
-            np.array(terminated_list),
-            np.array(truncated_list),
-            info_list
-        )
+    def log(self, row: Dict[str, Any]):
+        """Write a row to CSV. Missing keys are left blank."""
+        # Ensure all header fields are present
+        full_row = {k: row.get(k, "") for k in self.HEADER}
+        self.writer.writerow(full_row)
+        self.file.flush()
     
     def close(self):
-        for env in self.envs:
-            env.close()
+        self.file.close()
+
+
+class Timer:
+    """Simple timer for measuring elapsed time."""
+    
+    def __init__(self):
+        self.reset()
+    
+    def reset(self):
+        self.start_time = None
+        self.elapsed = 0.0
+        self.count = 0
+    
+    def start(self):
+        self.start_time = time.perf_counter()
+    
+    def stop(self):
+        if self.start_time is not None:
+            self.elapsed += time.perf_counter() - self.start_time
+            self.count += 1
+            self.start_time = None
+    
+    def average_ms(self) -> float:
+        """Get average time in milliseconds."""
+        if self.count == 0:
+            return 0.0
+        return (self.elapsed / self.count) * 1000.0
+    
+    def total_seconds(self) -> float:
+        """Get total elapsed time in seconds."""
+        return self.elapsed
+
+
+def set_seed(seed: int):
+    """Set random seed for reproducibility."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
 
 def linear_epsilon(step: int, start: float, end: float, decay_steps: int) -> float:
@@ -135,150 +159,152 @@ def linear_epsilon(step: int, start: float, end: float, decay_steps: int) -> flo
     return start + (end - start) * t
 
 
-def evaluate(agent: DQNAgent, env: SnakeEnv, episodes: int = 5) -> Tuple[float, float]:
-    """
-    Evaluate agent performance without exploration.
-    
-    Returns:
-        Tuple of (average return, average length)
-    """
-    total_return = 0.0
-    total_length = 0.0
-    
-    for _ in range(episodes):
-        obs, _ = env.reset()
-        done = False
-        ep_return = 0.0
-        ep_length = 0
-        
-        while not done:
-            action = agent.act(obs, epsilon=0.0)
-            obs, reward, terminated, truncated, info = env.step(action)
-            ep_return += reward
-            ep_length += 1
-            done = terminated or truncated
-        
-        total_return += ep_return
-        total_length += ep_length
-    
-    return total_return / episodes, total_length / episodes
-
-
 def main() -> None:
-    """Main training loop with profiling and monitoring."""
+    """Main training loop with fast-first defaults and comprehensive logging."""
     parser = argparse.ArgumentParser(
-        description="High-throughput DQN training for Snake RL",
+        description="Fast-first DQN training for Snake RL",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     
-    # Add existing training arguments
-    add_training_arguments(parser)
+    # Device and stopping conditions
+    parser.add_argument("--device", type=str, default="auto", choices=["auto", "cuda", "cpu"],
+                        help="Device to use (auto=prefer CUDA if available)")
+    parser.add_argument("--total_steps", type=int, default=50000,
+                        help="Total environment steps (stop condition 1)")
+    parser.add_argument("--max_seconds", type=int, default=300,
+                        help="Maximum wall-clock time in seconds (stop condition 2)")
     
-    # Advanced training options
+    # Environment configuration
     parser.add_argument("--n_envs", type=int, default=1,
-                        help="Number of parallel environments")
-    parser.add_argument("--train_freq", type=int, default=4,
-                        help="Train every N environment steps")
-    parser.add_argument("--gradient_steps", type=int, default=1,
-                        help="Number of gradient steps per training call")
+                        help="Number of parallel environments (default 1 for fast-first)")
+    parser.add_argument("--grid_w", type=int, default=24,
+                        help="Grid width")
+    parser.add_argument("--grid_h", type=int, default=20,
+                        help="Grid height")
+    
+    # DQN hyperparameters (fast-first defaults)
+    parser.add_argument("--batch_size", type=int, default=256,
+                        help="Batch size for learning")
+    parser.add_argument("--gradient_steps", type=int, default=2,
+                        help="Gradient steps per training call")
     parser.add_argument("--n_step", type=int, default=1,
-                        help="N-step returns (1=standard TD, 3-5 recommended)")
-    parser.add_argument("--dueling", action="store_true", default=True,
-                        help="Use Dueling DQN architecture")
-    parser.add_argument("--no_dueling", action="store_false", dest="dueling",
-                        help="Disable Dueling DQN")
+                        help="N-step returns (1=standard TD)")
+    parser.add_argument("--train_freq", type=int, default=4,
+                        help="Train every N env steps")
+    parser.add_argument("--lr", type=float, default=0.0001,
+                        help="Learning rate")
+    parser.add_argument("--gamma", type=float, default=0.99,
+                        help="Discount factor")
+    parser.add_argument("--buffer_size", type=int, default=100000,
+                        help="Replay buffer size")
+    parser.add_argument("--train_start", type=int, default=10000,
+                        help="Start training after N steps")
+    parser.add_argument("--target_update", type=int, default=10000,
+                        help="Target network update interval")
     parser.add_argument("--hidden_size", type=int, default=512,
                         help="Hidden layer size")
     
-    # Profiling and logging
-    parser.add_argument("--log_dir", type=str, default="runs/dqn_baseline",
-                        help="TensorBoard log directory")
-    parser.add_argument("--profile", action="store_true",
-                        help="Enable detailed profiling")
-    parser.add_argument("--log_interval", type=int, default=100,
+    # Exploration
+    parser.add_argument("--eps_start", type=float, default=1.0,
+                        help="Initial epsilon")
+    parser.add_argument("--eps_end", type=float, default=0.01,
+                        help="Final epsilon")
+    parser.add_argument("--eps_decay_steps", type=int, default=40000,
+                        help="Epsilon decay duration")
+    
+    # Logging
+    parser.add_argument("--log_interval", type=int, default=1000,
                         help="Log metrics every N steps")
+    parser.add_argument("--log_dir", type=str, default="runs",
+                        help="Base directory for logs")
+    parser.add_argument("--exp_name", type=str, default=None,
+                        help="Experiment name (default: timestamp)")
+    
+    # Reproducibility
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Random seed")
+    
+    # Optional optimizations (default OFF for fast-first)
+    parser.add_argument("--use_amp", action="store_true", default=False,
+                        help="Enable automatic mixed precision (AMP)")
+    parser.add_argument("--compile", action="store_true", default=False,
+                        help="Enable torch.compile")
+    parser.add_argument("--profile", action="store_true", default=False,
+                        help="Enable detailed profiling")
+    
+    # Environment rewards
+    parser.add_argument("--step_penalty", type=float, default=-0.01,
+                        help="Penalty per step")
+    parser.add_argument("--food_reward", type=float, default=1.0,
+                        help="Reward for eating food")
+    parser.add_argument("--death_reward", type=float, default=-1.0,
+                        help="Penalty for dying")
     
     args = parser.parse_args()
     
-    # Load config file if provided
-    if args.config:
-        config = load_config(args.config)
-        args = merge_config_with_args(config, args)
-        print(f"✓ Loaded configuration from: {args.config}")
+    # Set random seed
+    set_seed(args.seed)
     
-    # Setup TensorBoard logging
+    # Determine device
+    if args.device == "auto":
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        if device == "cpu" and torch.cuda.is_available():
+            warnings.warn("CUDA is available but using CPU. Use --device cuda for faster training.")
+    else:
+        device = args.device
+    
+    # Setup logging directory
+    if args.exp_name is None:
+        exp_name = f"fast_{int(time.time())}"
+    else:
+        exp_name = args.exp_name
+    
+    run_dir = Path(args.log_dir) / exp_name
+    run_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Setup CSV logger
+    csv_logger = CSVLogger(str(run_dir / "metrics.csv"))
+    
+    # Setup TensorBoard
     writer = None
     if TENSORBOARD_AVAILABLE:
-        os.makedirs(args.log_dir, exist_ok=True)
-        writer = SummaryWriter(log_dir=args.log_dir)
-        print(f"✓ TensorBoard logging enabled: {args.log_dir}")
-        print(f"  Run: tensorboard --logdir={args.log_dir}")
+        writer = SummaryWriter(log_dir=str(run_dir))
     
     # Setup GPU monitoring
-    gpu_monitor = None
-    if args.device in ("cuda", "auto") and torch.cuda.is_available():
-        gpu_monitor = GPUMonitor(device_index=0)
-        if gpu_monitor.enabled:
-            print("✓ GPU monitoring enabled")
-    
-    # Create vectorized environments
-    print(f"\n{'='*60}")
-    print(f"High-Throughput DQN Training")
-    print(f"{'='*60}")
-    
-    def make_env():
-        return SnakeEnv(
-            grid_w=args.grid_w,
-            grid_h=args.grid_h,
-            step_penalty=args.step_penalty,
-            food_reward=args.food_reward,
-            death_reward=args.death_reward,
-            distance_reward_scale=args.distance_reward_scale,
-            loop_penalty=args.loop_penalty,
-            exploration_reward_scale=args.exploration_reward_scale,
-            loop_detection_window=args.loop_detection_window,
-            render_mode="none",
-        )
-    
-    if args.n_envs > 1:
-        env = VectorizedEnvWrapper([make_env for _ in range(args.n_envs)], args.n_envs)
-        print(f"✓ Using {args.n_envs} vectorized environments")
-    else:
-        env = make_env()
-        print("✓ Using single environment")
-    
-    # Create evaluation environment
-    eval_env = make_env()
+    gpu_monitor = GPUMonitor() if device == "cuda" else None
     
     # Print configuration
-    print(f"\nEnvironment: {args.grid_w}x{args.grid_h} grid")
-    print(f"Device: {args.device}")
-    if args.device == "auto":
-        device_name = "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"  → Auto-selected: {device_name}")
-    
-    print(f"\nDQN Configuration:")
-    print(f"  Architecture: {'Dueling' if args.dueling else 'Standard'} DQN")
-    print(f"  Hidden size: {args.hidden_size}")
-    print(f"  Batch size: {args.batch_size}")
-    print(f"  Buffer size: {args.buffer_size:,}")
+    print(f"{'='*70}")
+    print(f"Fast-First DQN Training for Snake RL")
+    print(f"{'='*70}")
+    print(f"\nConfiguration:")
+    print(f"  Device: {device}")
+    print(f"  Seed: {args.seed}")
+    print(f"  Environment: {args.grid_w}x{args.grid_h} grid, n_envs={args.n_envs}")
+    print(f"\nDQN Settings (fast-first):")
+    print(f"  batch_size={args.batch_size}, gradient_steps={args.gradient_steps}")
+    print(f"  n_step={args.n_step}, train_freq={args.train_freq}")
     print(f"  Learning rate: {args.lr}")
-    print(f"  N-step returns: {args.n_step}")
-    print(f"  Gradient steps: {args.gradient_steps}")
-    print(f"  Train frequency: every {args.train_freq} env steps")
+    print(f"\nStopping Conditions:")
+    print(f"  total_steps={args.total_steps} OR max_seconds={args.max_seconds}")
+    print(f"\nLogging:")
+    print(f"  Directory: {run_dir}")
+    print(f"  Interval: every {args.log_interval} steps")
+    print(f"\nOptimizations:")
+    print(f"  AMP: {args.use_amp}, Compile: {args.compile}, Profile: {args.profile}")
+    print(f"{'='*70}\n")
     
-    print(f"\nGPU Optimizations:")
-    print(f"  Mixed precision (AMP): {args.use_amp}")
-    print(f"  Pin memory: {args.pin_memory}")
-    print(f"  Gradient accumulation: {args.gradient_accumulation_steps}")
-    print(f"  torch.compile: {args.compile_model}")
+    # Create environment
+    env = SnakeEnv(
+        grid_w=args.grid_w,
+        grid_h=args.grid_h,
+        step_penalty=args.step_penalty,
+        food_reward=args.food_reward,
+        death_reward=args.death_reward,
+        render_mode="none"
+    )
     
-    print(f"\nTraining:")
-    print(f"  Total steps: {args.total_steps:,}")
-    print(f"  Epsilon: {args.eps_start} → {args.eps_end} over {args.eps_decay_steps:,} steps")
-    print(f"{'='*60}\n")
-    
-    # Create agent
+    # Create DQN agent
     cfg = DQNConfig(
         grid_w=args.grid_w,
         grid_h=args.grid_h,
@@ -288,14 +314,15 @@ def main() -> None:
         target_update=args.target_update,
         buffer_size=args.buffer_size,
         train_start=args.train_start,
-        device=args.device,
-        dueling=args.dueling,
+        device=device,
+        dueling=True,  # Dueling DQN on by default
+        double_dqn=True,  # Double DQN on by default
         hidden_size=args.hidden_size,
         n_step=args.n_step,
         use_amp=args.use_amp,
-        pin_memory=args.pin_memory,
-        gradient_accumulation_steps=args.gradient_accumulation_steps,
-        compile_model=args.compile_model,
+        pin_memory=(device == "cuda"),  # Use pinned memory for GPU
+        gradient_accumulation_steps=1,
+        compile_model=args.compile,
         gradient_steps=args.gradient_steps,
     )
     agent = DQNAgent(cfg)
@@ -303,91 +330,112 @@ def main() -> None:
     print(f"Agent initialized on device: {agent.device}")
     if agent.use_gpu:
         gpu_name = torch.cuda.get_device_name(0)
-        gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1e9
-        print(f"GPU: {gpu_name} ({gpu_memory:.1f} GB)")
+        print(f"GPU: {gpu_name}")
     print()
     
-    # Setup checkpoints
-    os.makedirs(args.checkpoint_dir, exist_ok=True)
-    latest_ckpt = os.path.join(args.checkpoint_dir, "dqn_snake_latest.pth")
-    best_ckpt = os.path.join(args.checkpoint_dir, "dqn_snake_best.pth")
-    
     # Training state
-    if args.n_envs > 1:
-        obs, _ = env.reset(seed=args.seed)
-        ep_returns = np.zeros(args.n_envs)
-        ep_lengths = np.zeros(args.n_envs, dtype=int)
-    else:
-        obs, _ = env.reset(seed=args.seed)
-        ep_return = 0.0
-        ep_len = 0
+    obs, _ = env.reset(seed=args.seed)
+    ep_return = 0.0
+    ep_len = 0
     
     returns = deque(maxlen=100)
     lengths = deque(maxlen=100)
-    best_avg_return = -float('inf')
+    episode_count = 0
     
-    # Profiling metrics
-    env_time = 0.0
-    learner_time = 0.0
-    env_steps = 0
-    train_steps_count = 0
+    # Timing
+    env_timer = Timer()
+    learn_timer = Timer()
+    
+    # Metrics for logging
+    steps_in_interval = 0
+    updates_in_interval = 0
+    interval_start_time = time.perf_counter()
+    
+    # Wall-clock timeout
+    training_start_time = time.perf_counter()
     
     # Training loop
-    t_start = time.time()
     pbar = trange(args.total_steps, desc="Training", unit="step")
     
     for step in pbar:
+        # Check wall-clock timeout
+        elapsed = time.perf_counter() - training_start_time
+        if elapsed >= args.max_seconds:
+            print(f"\n⏱️  Reached max_seconds={args.max_seconds}. Stopping.")
+            # Log final state before breaking
+            if steps_in_interval > 0:
+                interval_end_time = time.perf_counter()
+                interval_duration = interval_end_time - interval_start_time
+                
+                steps_per_sec = steps_in_interval / interval_duration if interval_duration > 0 else 0.0
+                updates_per_sec = updates_in_interval / interval_duration if interval_duration > 0 else 0.0
+                samples_per_sec = updates_per_sec * args.batch_size
+                
+                time_env_ms = env_timer.average_ms()
+                time_learn_ms = learn_timer.average_ms()
+                
+                gpu_util = gpu_monitor.get_utilization() if gpu_monitor else 0.0
+                
+                csv_row = {
+                    "step": step,
+                    "episodes": episode_count,
+                    "episode_return_mean": np.mean(returns) if returns else "",
+                    "episode_length_mean": np.mean(lengths) if lengths else "",
+                    "steps_per_sec": f"{steps_per_sec:.2f}",
+                    "updates_per_sec": f"{updates_per_sec:.2f}",
+                    "samples_per_sec": f"{samples_per_sec:.2f}",
+                    "time_env_ms_per_step": f"{time_env_ms:.4f}",
+                    "time_learn_ms_per_update": f"{time_learn_ms:.4f}",
+                    "replay_size": len(agent.replay),
+                    "epsilon": f"{epsilon:.4f}",
+                    "loss_q": f"{loss:.6f}" if loss is not None else "",
+                    "td_error_mean": "",
+                    "gpu_util": f"{gpu_util:.2f}" if gpu_util > 0 else "",
+                    "device": device,
+                    "batch_size": args.batch_size,
+                    "gradient_steps": args.gradient_steps,
+                    "n_envs": args.n_envs,
+                    "n_step": args.n_step,
+                    "seed": args.seed,
+                }
+                csv_logger.log(csv_row)
+            break
+        
+        # Epsilon schedule
         epsilon = linear_epsilon(step, args.eps_start, args.eps_end, args.eps_decay_steps)
         
         # Environment step
-        t_env_start = time.time()
-        if args.n_envs > 1:
-            actions = np.array([agent.act(o, epsilon=epsilon) for o in obs])
-            next_obs, rewards, terminateds, truncateds, infos = env.step(actions)
-            dones = np.logical_or(terminateds, truncateds)
-            
-            # Push transitions to replay buffer
-            for i in range(args.n_envs):
-                agent.push(obs[i], actions[i], rewards[i], next_obs[i], terminateds[i])
-                ep_returns[i] += rewards[i]
-                ep_lengths[i] += 1
-                
-                if dones[i]:
-                    returns.append(ep_returns[i])
-                    lengths.append(ep_lengths[i])
-                    ep_returns[i] = 0.0
-                    ep_lengths[i] = 0
-            
-            obs = next_obs
-            env_steps += args.n_envs
-        else:
-            action = agent.act(obs, epsilon=epsilon)
-            next_obs, reward, terminated, truncated, info = env.step(action)
-            done = terminated or truncated
-            
-            agent.push(obs, action, reward, next_obs, terminated)
-            
-            obs = next_obs
-            ep_return += reward
-            ep_len += 1
-            env_steps += 1
-            
-            if done:
-                returns.append(ep_return)
-                lengths.append(ep_len)
-                obs, _ = env.reset()
-                ep_return = 0.0
-                ep_len = 0
+        env_timer.start()
+        action = agent.act(obs, epsilon=epsilon)
+        next_obs, reward, terminated, truncated, info = env.step(action)
+        done = terminated or truncated
         
-        env_time += time.time() - t_env_start
+        agent.push(obs, action, reward, next_obs, terminated)
+        
+        obs = next_obs
+        ep_return += reward
+        ep_len += 1
+        env_timer.stop()
+        
+        steps_in_interval += 1
+        
+        if done:
+            returns.append(ep_return)
+            lengths.append(ep_len)
+            episode_count += 1
+            obs, _ = env.reset()
+            ep_return = 0.0
+            ep_len = 0
         
         # Training step
         loss = None
         if step % args.train_freq == 0 and agent.replay.size >= agent.train_start:
-            t_learner_start = time.time()
-            loss = agent.train_step()
-            learner_time += time.time() - t_learner_start
-            train_steps_count += 1
+            learn_timer.start()
+            # Perform gradient_steps updates
+            for _ in range(args.gradient_steps):
+                loss = agent.train_step()
+            learn_timer.stop()
+            updates_in_interval += args.gradient_steps
         
         # Update progress bar
         avg_ret = np.mean(returns) if returns else 0.0
@@ -397,84 +445,95 @@ def main() -> None:
             ret=f"{avg_ret:.2f}",
             len=avg_len,
             loss=f"{(loss or 0):.4f}",
-            buf=f"{len(agent.replay)}/{agent.replay.capacity}"
         )
         
         # Logging
-        if writer and (step + 1) % args.log_interval == 0:
-            writer.add_scalar("train/epsilon", epsilon, step + 1)
-            writer.add_scalar("train/buffer_size", len(agent.replay), step + 1)
+        if (step + 1) % args.log_interval == 0 or (step + 1) == args.total_steps:
+            interval_end_time = time.perf_counter()
+            interval_duration = interval_end_time - interval_start_time
             
-            if returns:
-                writer.add_scalar("train/return_mean", np.mean(returns), step + 1)
-                writer.add_scalar("train/return_std", np.std(returns), step + 1)
-                writer.add_scalar("train/length_mean", np.mean(lengths), step + 1)
+            # Calculate metrics
+            steps_per_sec = steps_in_interval / interval_duration if interval_duration > 0 else 0.0
+            updates_per_sec = updates_in_interval / interval_duration if interval_duration > 0 else 0.0
+            samples_per_sec = updates_per_sec * args.batch_size
             
-            if loss is not None:
-                writer.add_scalar("train/loss", loss, step + 1)
+            time_env_ms = env_timer.average_ms()
+            time_learn_ms = learn_timer.average_ms()
             
-            # Performance metrics
-            if env_steps > 0:
-                elapsed = time.time() - t_start
-                fps = env_steps / elapsed
-                writer.add_scalar("perf/env_fps", fps, step + 1)
-                writer.add_scalar("perf/env_time_pct", 100 * env_time / elapsed, step + 1)
-                writer.add_scalar("perf/learner_time_pct", 100 * learner_time / elapsed, step + 1)
+            gpu_util = gpu_monitor.get_utilization() if gpu_monitor else 0.0
             
-            # GPU utilization
-            if gpu_monitor and gpu_monitor.enabled:
-                gpu_util, mem_util = gpu_monitor.get_utilization()
-                writer.add_scalar("perf/gpu_utilization", gpu_util, step + 1)
-                writer.add_scalar("perf/gpu_memory_utilization", mem_util, step + 1)
-        
-        # Periodic evaluation
-        if (step + 1) % args.eval_interval == 0:
-            eval_return, eval_length = evaluate(agent, eval_env, episodes=args.eval_episodes)
+            # CSV logging
+            csv_row = {
+                "step": step + 1,
+                "episodes": episode_count,
+                "episode_return_mean": np.mean(returns) if returns else "",
+                "episode_length_mean": np.mean(lengths) if lengths else "",
+                "steps_per_sec": f"{steps_per_sec:.2f}",
+                "updates_per_sec": f"{updates_per_sec:.2f}",
+                "samples_per_sec": f"{samples_per_sec:.2f}",
+                "time_env_ms_per_step": f"{time_env_ms:.4f}",
+                "time_learn_ms_per_update": f"{time_learn_ms:.4f}",
+                "replay_size": len(agent.replay),
+                "epsilon": f"{epsilon:.4f}",
+                "loss_q": f"{loss:.6f}" if loss is not None else "",
+                "td_error_mean": "",  # Not tracked in current implementation
+                "gpu_util": f"{gpu_util:.2f}" if gpu_util > 0 else "",
+                "device": device,
+                "batch_size": args.batch_size,
+                "gradient_steps": args.gradient_steps,
+                "n_envs": args.n_envs,
+                "n_step": args.n_step,
+                "seed": args.seed,
+            }
+            csv_logger.log(csv_row)
             
-            print(f"\n[Step {step + 1:,}] Eval: return={eval_return:.2f}, length={eval_length:.1f}")
-            
+            # TensorBoard logging
             if writer:
-                writer.add_scalar("eval/return", eval_return, step + 1)
-                writer.add_scalar("eval/length", eval_length, step + 1)
+                if returns:
+                    writer.add_scalar("episode/return_mean", np.mean(returns), step + 1)
+                    writer.add_scalar("episode/length_mean", np.mean(lengths), step + 1)
+                
+                writer.add_scalar("perf/steps_per_sec", steps_per_sec, step + 1)
+                writer.add_scalar("perf/updates_per_sec", updates_per_sec, step + 1)
+                writer.add_scalar("perf/samples_per_sec", samples_per_sec, step + 1)
+                
+                writer.add_scalar("time/env_ms_per_step", time_env_ms, step + 1)
+                writer.add_scalar("time/learn_ms_per_update", time_learn_ms, step + 1)
+                
+                if loss is not None:
+                    writer.add_scalar("loss/q", loss, step + 1)
+                
+                if gpu_util > 0:
+                    writer.add_scalar("sys/gpu_util", gpu_util, step + 1)
             
-            if eval_return > best_avg_return:
-                best_avg_return = eval_return
-                agent.save(best_ckpt)
-                print(f"  ★ New best model saved: {best_ckpt}")
-            else:
-                agent.save(latest_ckpt)
-                print(f"  Checkpoint saved: {latest_ckpt}")
+            # Reset interval metrics
+            steps_in_interval = 0
+            updates_in_interval = 0
+            env_timer.reset()
+            learn_timer.reset()
+            interval_start_time = time.perf_counter()
     
-    # Final save and summary
-    agent.save(latest_ckpt)
+    # Cleanup
     env.close()
-    eval_env.close()
-    
-    total_time = time.time() - t_start
-    
-    print(f"\n{'='*60}")
-    print(f"Training Complete!")
-    print(f"{'='*60}")
-    print(f"Total time: {total_time/60:.2f} minutes")
-    print(f"Best evaluation return: {best_avg_return:.2f}")
-    
-    if args.profile:
-        print(f"\nPerformance Profile:")
-        print(f"  Environment steps: {env_steps:,}")
-        print(f"  Training steps: {train_steps_count:,}")
-        print(f"  Environment FPS: {env_steps / total_time:.1f}")
-        print(f"  Environment time: {env_time:.1f}s ({100*env_time/total_time:.1f}%)")
-        print(f"  Learner time: {learner_time:.1f}s ({100*learner_time/total_time:.1f}%)")
-        
-        if gpu_monitor and gpu_monitor.enabled:
-            final_gpu_util, final_mem_util = gpu_monitor.get_utilization()
-            print(f"  Final GPU utilization: {final_gpu_util:.1f}%")
-            print(f"  Final GPU memory: {final_mem_util:.1f}%")
-    
-    print(f"{'='*60}\n")
-    
+    csv_logger.close()
     if writer:
         writer.close()
+    
+    total_time = time.perf_counter() - training_start_time
+    
+    print(f"\n{'='*70}")
+    print(f"Training Complete!")
+    print(f"{'='*70}")
+    print(f"Total time: {total_time:.2f}s ({total_time/60:.2f} min)")
+    print(f"Total episodes: {episode_count}")
+    if returns:
+        print(f"Final avg return: {np.mean(returns):.2f}")
+        print(f"Final avg length: {np.mean(lengths):.1f}")
+    print(f"\nLogs saved to: {run_dir}")
+    print(f"  - CSV metrics: {run_dir / 'metrics.csv'}")
+    if TENSORBOARD_AVAILABLE:
+        print(f"  - TensorBoard: tensorboard --logdir {args.log_dir}")
+    print(f"{'='*70}\n")
 
 
 if __name__ == "__main__":

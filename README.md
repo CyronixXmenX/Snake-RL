@@ -1,49 +1,222 @@
 # Snake RL with Deep Q-Network (DQN)
 
-Train a Deep Q-Network agent to play Snake using reinforcement learning. The implementation uses PyTorch and follows best practices for stable DQN training.
+Train a Deep Q-Network agent to play Snake using reinforcement learning. The implementation uses PyTorch and follows best practices for stable DQN training with a **fast-first** approach optimized for rapid iteration.
 
-## 🚀 Quick Start
+## 🚀 Quick Start (Fast Mode - ≤5 minutes)
 
-### 1. Install Dependencies
+The fastest way to train an agent and see results:
+
 ```bash
-pip install -r requirements.txt
+make fast
 ```
 
-### 2. Train the Agent
+This runs a fast training session with:
+- **Duration**: ≤5 minutes (50,000 steps or 300 seconds, whichever comes first)
+- **Settings**: batch_size=256, gradient_steps=2, n_step=1, train_freq=4
+- **Output**: Logs saved to `runs/fast/<timestamp>/`
 
-**CPU Training:**
+### View Training Metrics
+
 ```bash
-python train_dqn.py --config config.yaml
+make tensorboard
 ```
 
-**GPU Training (15-20x faster):**
+Then open http://localhost:6006 in your browser to see:
+- Episode returns and lengths over time
+- Training performance (steps/sec, updates/sec, samples/sec)
+- Timing breakdown (env stepping vs learning)
+- GPU utilization (if available)
+- Loss and other training metrics
+
+### Check CSV Metrics
+
 ```bash
-python train_dqn.py --config config_gpu.yaml
+cat runs/fast/*/metrics.csv | head -5
 ```
 
-**Quick Test (10k steps):**
+The CSV contains detailed per-interval metrics including timing, performance, and hyperparameters.
+
+---
+
+## 📊 Performance Mode (Opt-in)
+
+For better sample efficiency and GPU utilization at the cost of slower iteration:
+
 ```bash
-python train_dqn.py --total_steps 10000 --eval_interval 5000
+make perf
 ```
 
-### 3. Evaluate Your Agent
-```bash
-# Watch the agent play (with visualization)
-python evaluate_dqn.py --model checkpoints/dqn_snake_best.pth --episodes 5 --render True
+This uses heavier update settings:
+- **Batch size**: 1024 (vs 256 in fast mode)
+- **Gradient steps**: 8 (vs 2 in fast mode)
+- **N-step returns**: 3 (vs 1 in fast mode)
+- **AMP**: Enabled (mixed precision for faster GPU training)
+- **Duration**: Up to 1 hour or 500,000 steps
 
-# Quick performance test (no visualization)
-python evaluate_dqn.py --model checkpoints/dqn_snake_best.pth --episodes 10 --render False
+**Trade-offs:**
+- ✅ Higher samples/sec (more data processed per second during updates)
+- ✅ Better GPU utilization (especially on modern GPUs)
+- ✅ Often better sample efficiency (learns faster per environment step)
+- ❌ Lower environment steps/sec (env waits longer for updates)
+- ❌ Requires more memory
+
+---
+
+## ⚙️ Configuration Flags
+
+You can customize training with these flags:
+
+### Core Settings
+- `--device {auto|cuda|cpu}` - Device selection (auto prefers CUDA if available)
+- `--total_steps N` - Maximum environment steps (default: 50000)
+- `--max_seconds N` - Wall-clock timeout in seconds (default: 300)
+- `--seed N` - Random seed for reproducibility (default: 42)
+
+### DQN Hyperparameters (Fast-First Defaults)
+- `--batch_size N` - Batch size for learning (default: 256, try 512-1024 for perf mode)
+- `--gradient_steps N` - Gradient updates per training call (default: 2, try 4-8 for perf)
+- `--n_step N` - N-step returns (default: 1, try 3 for perf mode)
+- `--train_freq N` - Train every N env steps (default: 4)
+- `--lr F` - Learning rate (default: 0.0001)
+- `--buffer_size N` - Replay buffer size (default: 100000)
+
+### Logging
+- `--log_interval N` - Log metrics every N steps (default: 1000)
+- `--log_dir DIR` - Base directory for logs (default: runs)
+- `--exp_name NAME` - Experiment name (default: timestamp)
+
+### Optional Optimizations (Default OFF)
+- `--use_amp` - Enable automatic mixed precision (recommended for GPU)
+- `--compile` - Enable torch.compile for ~20% speedup (PyTorch 2.0+, Linux/macOS only)
+- `--profile` - Enable detailed profiling
+
+### Example: Custom Fast Run
+```bash
+python train_dqn_advanced.py \
+  --device cuda \
+  --total_steps 100000 \
+  --max_seconds 600 \
+  --batch_size 512 \
+  --gradient_steps 4 \
+  --log_interval 2000
 ```
 
-### 4. Play Manually (Optional)
-```bash
-python main.py
-```
-Use arrow keys or WASD to control the snake.
+---
+
+## 📈 Understanding Metrics
+
+### CSV Schema
+The `metrics.csv` file contains the following columns (in order):
+
+| Column | Description |
+|--------|-------------|
+| `step` | Current training step |
+| `episodes` | Total episodes completed |
+| `episode_return_mean` | Average return over last 100 episodes |
+| `episode_length_mean` | Average episode length over last 100 episodes |
+| `steps_per_sec` | Environment steps per second (rolling average) |
+| `updates_per_sec` | Optimizer updates per second (rolling average) |
+| `samples_per_sec` | Samples processed per second (updates × batch_size) |
+| `time_env_ms_per_step` | Average time per env step in milliseconds |
+| `time_learn_ms_per_update` | Average time per optimizer update in milliseconds |
+| `replay_size` | Current replay buffer size |
+| `epsilon` | Current exploration rate |
+| `loss_q` | Q-value loss |
+| `td_error_mean` | Mean TD error (if tracked) |
+| `gpu_util` | GPU utilization percentage (if available) |
+| `device` | Device used (cpu/cuda) |
+| `batch_size` | Batch size used |
+| `gradient_steps` | Gradient steps per training call |
+| `n_envs` | Number of parallel environments |
+| `n_step` | N-step returns |
+| `seed` | Random seed |
+
+### Key Metrics to Watch
+
+**Episode Return** (`episode_return_mean`): Higher is better. Should gradually increase from negative values (dying quickly) to positive values (surviving and eating food).
+
+**Steps per Second** (`steps_per_sec`): Higher means faster training iteration. Fast mode should achieve 50-200 steps/sec on CPU, 200-1000+ on GPU.
+
+**Updates per Second** (`updates_per_sec`): Number of gradient updates per second. Fast mode prioritizes this being small but frequent.
+
+**Samples per Second** (`samples_per_sec`): Total samples processed per second (updates × batch_size). Performance mode optimizes for this metric.
+
+**Timing Split**: Compare `time_env_ms_per_step` vs `time_learn_ms_per_update` to see where time is spent.
+
+---
+
+## 🔧 Troubleshooting
+
+### Low steps/sec (slow training)
+- **Reduce** `gradient_steps` (try 1 or 2)
+- **Reduce** `batch_size` (try 128 or 256)
+- Keep `n_envs=1` (vectorization often slower for tiny Snake env)
+- Disable `--use_amp`, `--compile`, `--profile`
+- Check if another process is using GPU/CPU
+
+### Low GPU utilization (<30%)
+- **Increase** `batch_size` (try 512, 1024, or higher)
+- **Increase** `gradient_steps` (try 4, 8, or 16)
+- Prefer "fewer, fatter" updates: increase `train_freq` to 8 or 16, match with higher `gradient_steps`
+- Enable `--use_amp` for mixed precision
+- Consider increasing `--hidden_size` (try 512 or 1024)
+
+### Agent not learning
+- Check that `episode_return_mean` is improving over time
+- Increase `total_steps` (try 200k-500k)
+- Verify epsilon decay isn't too fast (check `epsilon` column in CSV)
+- Try different `--seed` values
+- Ensure rewards are balanced (not all negative)
+
+### CUDA out of memory
+- Reduce `batch_size` (try 128 or 64)
+- Reduce `buffer_size` (try 50000)
+- Disable `--use_amp` (counter-intuitive but can help in some cases)
+
+### torch.compile warning on Windows
+- Disable `--compile` flag (not supported on Windows due to missing Triton)
+- This is expected behavior; training still works without compile
+
+---
+
+## 💻 Installation
+
+### Prerequisites
+- Python 3.8 or higher
+- (Optional) NVIDIA GPU with CUDA support for faster training
+
+### Installation Steps
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/CyronixXmenX/Snake-RL.git
+   cd Snake-RL
+   ```
+
+2. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Verify installation:**
+   ```bash
+   python -c "import torch; print(f'PyTorch: {torch.__version__}'); print(f'CUDA: {torch.cuda.is_available()}')"
+   ```
+
+4. **Run a quick test:**
+   ```bash
+   make fast
+   ```
 
 ---
 
 ## 📊 Features
+
+### Fast-First Training Philosophy
+- **Rapid iteration**: Default settings optimized for ≤5 minute runs
+- **Wall-clock timeout**: Training stops at either `total_steps` OR `max_seconds` (whichever comes first)
+- **Comprehensive logging**: CSV metrics + TensorBoard with timing instrumentation
+- **Optional performance mode**: Opt-in heavier settings for better sample efficiency
 
 ### Environment
 - **Gymnasium-compatible** Snake environment with optimized collision detection
@@ -54,46 +227,55 @@ Use arrow keys or WASD to control the snake.
   - +1.0 for eating food (default)
   - -1.0 for dying (collision)
   - -0.01 per step (time penalty)
-  - **Distance-based reward shaping**: Optional dense rewards for moving toward food (improves learning)
-  - **Loop detection**: Penalizes circular movement patterns to prevent the snake from going in circles
-  - **Exploration rewards**: Heatmap-based rewards encourage visiting new/less-visited cells
-  - **Anti-circle system**: Detects when the snake revisits recent positions and applies penalties
 
-### DQN Agent
+### DQN Agent (Fast-First Baseline)
+- **Double DQN** to reduce Q-value overestimation (always enabled)
+- **Dueling architecture** for better value estimation (on by default)
 - **CNN architecture** optimized for small grid environments
 - **Experience replay** with memory-efficient uint8 storage
-- **Double DQN** to reduce Q-value overestimation
-- **Target network** for stable learning
-- **Epsilon-greedy exploration** with linear decay
+- **Pinned memory** + `non_blocking=True` for efficient GPU transfers
+- **Target network** with hard updates (default: every 10k steps)
+- **Epsilon-greedy exploration** with linear decay (1.0 → 0.01)
 - **Gradient clipping** to prevent instability
-- **Checkpointing** with best model tracking
+- **N-step returns** (configurable, default: 1 for speed)
 
-### GPU Optimization
-- **Automatic device detection** (CPU/CUDA)
-- **GPU-optimized replay buffer** with zero-copy sampling (data stored directly on GPU)
-- **Mixed Precision Training (AMP)** for 2-3x speedup on modern GPUs
-- **Pinned memory** for async CPU-GPU transfers
-- **torch.compile** support for JIT compilation (PyTorch 2.0+, 20-30% speedup)
-- **TF32 acceleration** on Ampere+ GPUs (RTX 30xx+)
-- **cuDNN benchmarking** for optimized convolution kernels
-- **Gradient accumulation** for larger effective batch sizes
-- **CUDA streams** for concurrent GPU operations
+### Logging & Metrics
+- **CSV logging**: Detailed metrics with exact schema (step, episodes, returns, timing, etc.)
+- **TensorBoard**: Real-time visualization of training progress
+- **Timing instrumentation**: Separate tracking for env stepping vs learner updates
+- **Performance metrics**: steps/sec, updates/sec, samples/sec
+- **Optional GPU monitoring**: Utilization tracking via pynvml
 
 ---
 
-## ⚙️ Configuration
+## 🔬 Reproducibility
 
-### Using Config Files (Recommended)
-
-Config files provide a clean way to manage hyperparameters:
+For reproducible results, use the `--seed` flag:
 
 ```bash
-# CPU-optimized (balanced speed/memory)
-python train_dqn.py --config config.yaml
-
-# GPU-optimized (faster training)
-python train_dqn.py --config config_gpu.yaml
+python train_dqn_advanced.py --seed 42
 ```
+
+The training script sets seeds for:
+- Python's `random` module
+- NumPy
+- PyTorch (including CUDA if available)
+- Environment resets
+
+**Note**: Even with the same seed, results may vary slightly across different hardware (especially GPU models) due to floating-point precision differences and non-deterministic GPU operations.
+
+---
+
+## ⚙️ Alternative Training Scripts
+
+This repository also includes other training scripts for different use cases:
+
+### Basic Training (Config-based)
+```bash
+python train_dqn.py --config config.yaml
+```
+
+Uses YAML config files for hyperparameters. See `config.yaml` and `config_gpu.yaml` for examples.
 
 ### Creating Custom Config
 
