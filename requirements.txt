@@ -9,3 +9,4 @@ sb3-contrib>=2.0.0
 tensorboard>=2.14.0
 optuna>=3.3.0
 pynvml>=11.5.0
+requests>=2.31.0
